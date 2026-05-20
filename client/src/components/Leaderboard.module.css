@@ -1,0 +1,192 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: 40px;
+}
+
+.state {
+  color: var(--text-muted);
+  text-align: center;
+  margin-top: 80px;
+}
+
+.seasonBadge {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.seasonName {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.seasonSelect {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-primary);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid var(--border);
+  padding: 0 4px 2px 0;
+  cursor: pointer;
+  appearance: auto;
+}
+
+.statusPill {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+.statusPill.active    { background: rgba(59, 165, 92, 0.2);  color: var(--green); }
+.statusPill.draft     { background: rgba(128, 132, 142, 0.2); color: var(--text-muted); }
+.statusPill.completed { background: rgba(88, 101, 242, 0.2);  color: var(--accent); }
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.heading {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+
+.tableWrap {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+/* Inner scroll container — allows horizontal scroll while keeping border-radius */
+.tableScroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.tournamentScroll {
+  overflow-y: auto;
+  max-height: 726px; /* ~15 rows */
+}
+
+.tournamentScroll .table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.playerScroll {
+  overflow-y: auto;
+  max-height: 492px; /* ~10 rows */
+}
+
+.playerScroll .table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 480px;
+}
+
+.table th {
+  padding: 10px 16px;
+  text-align: left;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  background: var(--bg-tertiary);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.table td {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-primary);
+  vertical-align: middle;
+}
+
+.table tr:last-child td { border-bottom: none; }
+.table tbody tr:hover td { background: var(--bg-hover); }
+
+.teamName,
+.playerName { font-weight: 600; }
+
+.tournamentLink {
+  color: var(--text-primary);
+  text-decoration: none;
+}
+
+.tournamentLink:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.secondary { color: var(--text-secondary); }
+.muted     { color: var(--text-muted); }
+
+.table .center { text-align: center; }
+
+.points {
+  font-weight: 700;
+  font-size: 16px;
+  color: var(--accent);
+}
+
+/* Rank */
+.gold   { font-weight: 700; color: #faa61a; }
+.silver { font-weight: 700; color: #b5bac1; }
+.bronze { font-weight: 700; color: #cd7f32; }
+
+/* SPR / Pts per event */
+.sprPositive { color: var(--green); font-weight: 600; }
+.sprNegative { color: var(--red);   font-weight: 600; }
+.sprNeutral  { color: var(--text-secondary); }
+
+/* ── Responsive ────────────────────────────────────────────────── */
+
+/* Tablet: tighten padding */
+@media (max-width: 768px) {
+  .table th,
+  .table td {
+    padding: 10px 12px;
+  }
+
+  .points { font-size: 14px; }
+}
+
+/* Mobile: hide less critical columns */
+@media (max-width: 560px) {
+  .table th,
+  .table td {
+    padding: 8px 10px;
+    font-size: 13px;
+  }
+
+  /* Team standings: hide Captain column (col 3) */
+  .teamTable th:nth-child(3),
+  .teamTable td:nth-child(3) { display: none; }
+
+  /* Player leaderboard: hide Team and Pts/Event columns (cols 3, 5) */
+  .playerTable th:nth-child(3),
+  .playerTable td:nth-child(3),
+  .playerTable th:nth-child(5),
+  .playerTable td:nth-child(5) { display: none; }
+}

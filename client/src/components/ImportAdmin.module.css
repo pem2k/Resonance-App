@@ -1,0 +1,233 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.empty {
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.warningCard {
+  background: rgba(250, 166, 26, 0.06);
+  border: 1px solid rgba(250, 166, 26, 0.3);
+  border-radius: 8px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.cardTitle {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.hint {
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.6;
+  margin: 0;
+}
+
+.hint code {
+  background: var(--bg-tertiary);
+  border-radius: 3px;
+  padding: 1px 5px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.fieldLabel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.fileLabel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.fileInput {
+  font-size: 13px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.fileInput::file-selector-button {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  padding: 5px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  margin-right: 10px;
+}
+
+.fileInput::file-selector-button:hover {
+  border-color: var(--accent);
+  color: var(--text-primary);
+}
+
+.textarea {
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-primary);
+  padding: 10px 12px;
+  font-size: 13px;
+  font-family: monospace;
+  line-height: 1.5;
+  resize: vertical;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* Preview grid */
+.teamGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 10px;
+}
+
+.teamPreview {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.teamPreviewName {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.teamPreviewCaptain {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.teamPreviewCount {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* Confirmation */
+.warningText {
+  font-size: 13px;
+  color: #faa61a;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.warningText code {
+  background: rgba(250, 166, 26, 0.12);
+  border-radius: 3px;
+  padding: 1px 5px;
+}
+
+.confirmInput {
+  background: var(--bg-primary);
+  border: 1px solid rgba(250, 166, 26, 0.4);
+  border-radius: 4px;
+  color: var(--text-primary);
+  padding: 7px 10px;
+  font-size: 14px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.confirmInput:focus {
+  outline: none;
+  border-color: #faa61a;
+}
+
+.confirmBad {
+  border-color: var(--red);
+}
+
+/* Submit */
+.importBtn {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  padding: 10px 24px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  align-self: flex-start;
+  white-space: nowrap;
+}
+
+.importBtn:hover:not(:disabled) { opacity: 0.88; }
+.importBtn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* Result / error */
+.resultBox {
+  background: rgba(59, 165, 93, 0.08);
+  border: 1px solid rgba(59, 165, 93, 0.25);
+  border-radius: 6px;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+}
+
+.resultBox p { margin: 0; color: var(--text-primary); }
+
+.warn { color: #faa61a; margin: 0; }
+
+.errorBox {
+  background: rgba(237, 66, 69, 0.08);
+  border: 1px solid rgba(237, 66, 69, 0.25);
+  border-radius: 6px;
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.errorBox p { margin: 0; font-size: 13px; color: #ed4245; }
+
+.errorMsg {
+  font-size: 13px;
+  color: #ed4245;
+  margin: 0;
+}

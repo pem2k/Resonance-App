@@ -1,0 +1,372 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* Cards */
+.card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.cardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.cardTitle {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+/* Scrollable table wrapper — keeps border-radius on card while allowing horizontal scroll */
+.tableWrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin: 0 -20px;
+  padding: 0 20px;
+}
+
+/* Grid layout for form fields */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.grid input,
+.grid select {
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-primary);
+  padding: 7px 10px;
+  font-size: 14px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.grid input:focus,
+.grid select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* Row layout */
+.row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+/* Info rows (key-value pairs) */
+.infoRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border);
+  gap: 12px;
+}
+
+.infoRow:last-child { border-bottom: none; }
+
+/* Buttons */
+.saveBtn {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  padding: 8px 18px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  align-self: flex-start;
+  white-space: nowrap;
+}
+
+.saveBtn:hover { opacity: 0.88; }
+.saveBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.cancelBtn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  padding: 8px 16px;
+  font-size: 14px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.cancelBtn:hover { background: var(--bg-hover); }
+
+.addBtn {
+  background: none;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  color: var(--text-muted);
+  padding: 12px;
+  font-size: 14px;
+  cursor: pointer;
+  text-align: center;
+  width: 100%;
+}
+
+.addBtn:hover { border-color: var(--accent); color: var(--text-primary); }
+
+.addBtnSmall {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 4px 0;
+  text-align: left;
+}
+
+.addBtnSmall:hover { text-decoration: underline; }
+
+.syncBtn {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  padding: 10px 24px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  align-self: flex-start;
+  white-space: nowrap;
+}
+
+.syncBtn:hover { opacity: 0.88; }
+.syncBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.mutedBtn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-muted);
+  padding: 3px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.mutedBtn:hover { color: var(--text-primary); border-color: var(--text-muted); }
+
+.saveSmall {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  padding: 3px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.deleteSmall {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 3px 6px;
+  border-radius: 4px;
+}
+
+.deleteSmall:hover { background: rgba(237, 66, 69, 0.15); color: #ed4245; }
+
+/* Table — always use table-cell layout, no display:flex on td */
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  min-width: 400px; /* prevents collapse before horizontal scroll kicks in */
+}
+
+.table th {
+  text-align: left;
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.table td {
+  padding: 8px 10px;
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+
+.table tbody tr:last-child td { border-bottom: none; }
+
+.center { text-align: center; }
+
+/* Action cell — text-align only, no display:flex (that breaks table layout) */
+.actions {
+  text-align: right;
+  white-space: nowrap;
+  padding-right: 10px !important;
+}
+
+.actions > * {
+  margin-left: 4px;
+}
+
+/* Inline form (add player row) */
+.inlineForm {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding-top: 8px;
+  flex-wrap: wrap;
+}
+
+.inlineForm input {
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-primary);
+  padding: 6px 10px;
+  font-size: 13px;
+  flex: 1;
+  min-width: 120px;
+}
+
+.inlineForm input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* Slug input inside table */
+.slugInput {
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text-primary);
+  padding: 4px 8px;
+  font-size: 12px;
+  width: 160px;
+  max-width: 100%;
+}
+
+.slugInput:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* Status badges */
+.pill {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+
+.draft     { background: rgba(114, 137, 218, 0.15); color: #7289da; }
+.active    { background: rgba(59, 165, 93, 0.15);  color: #3ba55d; }
+.completed { background: rgba(128, 132, 142, 0.15); color: #80848e; }
+
+/* Captain badge */
+.captainBadge {
+  font-size: 10px;
+  font-weight: 600;
+  background: rgba(255, 179, 0, 0.15);
+  color: #ffb300;
+  border-radius: 8px;
+  padding: 1px 6px;
+  margin-left: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+/* Messages and hints */
+.msg {
+  background: rgba(59, 165, 93, 0.12);
+  border: 1px solid rgba(59, 165, 93, 0.3);
+  border-radius: 6px;
+  color: #3ba55d;
+  padding: 10px 14px;
+  font-size: 13px;
+  margin: 0;
+}
+
+.hint {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 0;
+  line-height: 1.5;
+}
+
+.muted { color: var(--text-muted); }
+
+/* Result box (sync results) */
+.resultBox {
+  background: rgba(59, 165, 93, 0.08);
+  border: 1px solid rgba(59, 165, 93, 0.2);
+  border-radius: 6px;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+}
+
+.resultBox p { margin: 0; color: var(--text-primary); }
+
+.warn { color: #faa61a; margin: 0; }
+
+.warnBox {
+  background: rgba(250, 166, 26, 0.08);
+  border: 1px solid rgba(250, 166, 26, 0.25);
+  border-radius: 6px;
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+}
+
+.error { color: #ed4245; margin: 0; }
+
+.empty {
+  color: var(--text-muted);
+  font-size: 14px;
+  margin: 0;
+}

@@ -1,0 +1,154 @@
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border);
+}
+
+.heading {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+
+.hint {
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.muted {
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.tableWrap {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.scrollBody {
+  overflow-y: auto;
+  max-height: 492px; /* ~10 rows */
+}
+
+.scrollBody .table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.table th {
+  padding: 9px 14px;
+  text-align: left;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  background: var(--bg-tertiary);
+  border-bottom: 1px solid var(--border);
+}
+
+.table td {
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+}
+
+.table tr:last-child td {
+  border-bottom: none;
+}
+
+.table tbody tr:hover td {
+  background: var(--bg-hover);
+}
+
+.name a {
+  color: var(--text-primary);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.name a:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.secondary {
+  color: var(--text-secondary);
+}
+
+.center {
+  text-align: center;
+}
+
+.actions {
+  text-align: right;
+}
+
+.deleteBtn {
+  font-size: 12px;
+  color: var(--red);
+  opacity: 0.7;
+  padding: 3px 8px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  transition: opacity 0.15s, border-color 0.15s;
+  background: none;
+  cursor: pointer;
+}
+
+.deleteBtn:hover:not(:disabled) {
+  opacity: 1;
+  border-color: var(--red);
+}
+
+.deleteBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.restoreBtn {
+  font-size: 12px;
+  color: var(--green);
+  opacity: 0.7;
+  padding: 3px 8px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  transition: opacity 0.15s, border-color 0.15s;
+  background: none;
+  cursor: pointer;
+}
+
+.restoreBtn:hover:not(:disabled) {
+  opacity: 1;
+  border-color: var(--green);
+}
+
+.restoreBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.removedHeading {
+  margin-top: 8px;
+}
+
+.removedName a {
+  color: var(--text-muted);
+}
+
+.removedName a:hover {
+  color: var(--accent);
+}
