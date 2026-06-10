@@ -21,15 +21,23 @@ def create_app():
         raise RuntimeError("SECRET_KEY environment variable must be set.")
     app.config["SECRET_KEY"] = secret
 
-    app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv(
-        "DATABASE_URL", "sqlite:///resonance.db"
-    )
+    db_url = os.getenv("DATABASE_URL", "sqlite:///resonance.db")
+    # Heroku-style URLs use the deprecated postgres:// scheme; SQLAlchemy 2.x
+    # only accepts postgresql://
+    if db_url.startswith("postgres://"):
+        db_url = db_url.replace("postgres://", "postgresql://", 1)
+    is_sqlite = db_url.startswith("sqlite")
+
+    app.config["SQLALCHEMY_DATABASE_URI"] = db_url
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
-    # WAL mode lets reads proceed during long sync writes; busy_timeout avoids lock errors
-    app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
-        "connect_args": {"timeout": 30},
-        "pool_pre_ping": True,
-    }
+    if is_sqlite:
+        # WAL mode lets reads proceed during long sync writes; busy_timeout avoids lock errors
+        app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
+            "connect_args": {"timeout": 30},
+            "pool_pre_ping": True,
+        }
+    else:
+        app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {"pool_pre_ping": True}
 
     # ── Session / cookie security ─────────────────────────────────────────────
     app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=8)
@@ -56,10 +64,11 @@ def create_app():
 
     with app.app_context():
         db.create_all()
-        # WAL mode allows concurrent reads during long sync writes
-        db.session.execute(db.text("PRAGMA journal_mode=WAL"))
-        db.session.execute(db.text("PRAGMA busy_timeout=10000"))
-        db.session.commit()
+        if is_sqlite:
+            # WAL mode allows concurrent reads during long sync writes
+            db.session.execute(db.text("PRAGMA journal_mode=WAL"))
+            db.session.execute(db.text("PRAGMA busy_timeout=10000"))
+            db.session.commit()
 
     # ── CLI commands ──────────────────────────────────────────────────────────
     @app.cli.command("create-admin")

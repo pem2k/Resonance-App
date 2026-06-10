@@ -1,4 +1,7 @@
-from flask import Blueprint, jsonify
+import threading
+from datetime import datetime, timezone
+
+from flask import Blueprint, jsonify, current_app
 from api.extensions import db
 from api.models import Season, Player
 from api import sync as sync_service
@@ -7,26 +10,96 @@ from api.decorators import require_admin
 sync_bp = Blueprint("sync", __name__, url_prefix="/api/admin/sync")
 sync_bp.before_request(require_admin)
 
+# In-memory job state, one slot per season. Sync runs in a background thread
+# because a full-season sync takes minutes — far beyond Heroku's 30s request
+# timeout. Requires a single web process (see Procfile: --workers 1).
+_jobs: dict[int, dict] = {}
+_jobs_lock = threading.Lock()
+
+
+def _start_job(season_id: int, kind: str, target, *args) -> bool:
+    """Start a background sync job for a season. Returns False if one is already running."""
+    with _jobs_lock:
+        job = _jobs.get(season_id)
+        if job and job["running"]:
+            return False
+        _jobs[season_id] = {
+            "running": True,
+            "kind": kind,
+            "started_at": datetime.now(timezone.utc).isoformat(),
+            "finished_at": None,
+            "result": None,
+            "error": None,
+        }
+
+    app = current_app._get_current_object()
+
+    def run():
+        with app.app_context():
+            try:
+                result = target(*args)
+                _jobs[season_id].update(result=result)
+            except Exception as exc:
+                db.session.rollback()
+                _jobs[season_id].update(error=str(exc))
+            finally:
+                db.session.remove()
+                _jobs[season_id].update(
+                    running=False,
+                    finished_at=datetime.now(timezone.utc).isoformat(),
+                )
+
+    threading.Thread(target=run, daemon=True, name=f"sync-season-{season_id}").start()
+    return True
+
+
+def _job_payload(season_id: int) -> dict:
+    job = _jobs.get(season_id)
+    return job if job else {"running": False, "kind": None, "result": None, "error": None}
+
 
 @sync_bp.route("/season/<int:season_id>", methods=["POST"])
 def sync_season(season_id):
     """
-    Sync all rostered players in a season who have a startgg_slug.
-    Tournaments are discovered automatically from player event history.
-    Requires season.sync_from and season.sync_to to be set.
+    Start a background sync of all rostered players in a season who have a
+    startgg_slug. Returns 202 immediately; poll GET /season/<id>/job for progress.
     """
     season = db.get_or_404(Season, season_id)
-    result = sync_service.sync_season(season)
-    return jsonify(result)
+    if not season.sync_from or not season.sync_to:
+        return jsonify({"error": "Season sync_from and sync_to must be set."}), 400
+
+    def task(sid):
+        s = db.session.get(Season, sid)
+        return sync_service.sync_season(s)
+
+    if not _start_job(season_id, "season", task, season_id):
+        return jsonify({"error": "A sync is already running for this season."}), 409
+    return jsonify({"started": True}), 202
 
 
 @sync_bp.route("/season/<int:season_id>/player/<int:player_id>", methods=["POST"])
 def sync_player(season_id, player_id):
-    """Force re-sync a single player within the season window."""
+    """Start a background re-sync of a single player within the season window."""
     season = db.get_or_404(Season, season_id)
-    player = db.get_or_404(Player, player_id)
-    result = sync_service.sync_player(player, season)
-    return jsonify(result)
+    db.get_or_404(Player, player_id)
+    if not season.sync_from or not season.sync_to:
+        return jsonify({"error": "Season sync_from and sync_to must be set."}), 400
+
+    def task(sid, pid):
+        s = db.session.get(Season, sid)
+        p = db.session.get(Player, pid)
+        return sync_service.sync_player(p, s)
+
+    if not _start_job(season_id, "player", task, season_id, player_id):
+        return jsonify({"error": "A sync is already running for this season."}), 409
+    return jsonify({"started": True}), 202
+
+
+@sync_bp.route("/season/<int:season_id>/job", methods=["GET"])
+def sync_job(season_id):
+    """Poll the state of the season's background sync job."""
+    db.get_or_404(Season, season_id)
+    return jsonify(_job_payload(season_id))
 
 
 @sync_bp.route("/season/<int:season_id>/status", methods=["GET"])

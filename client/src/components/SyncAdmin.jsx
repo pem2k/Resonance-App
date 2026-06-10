@@ -16,21 +16,36 @@ export default function SyncAdmin({ activeSeason, onSyncStart, onSyncEnd }) {
 
   useEffect(() => { loadStatus() }, [activeSeason?.id])
 
-  async function runSync() {
+  // Sync runs as a background job on the server (it can take minutes).
+  // POST returns 202 immediately; poll the job endpoint until it finishes.
+  async function pollJob() {
+    for (;;) {
+      await new Promise(r => setTimeout(r, 3000))
+      try {
+        const job = await fetch(`/api/admin/sync/season/${activeSeason.id}/job`, {
+          credentials: 'include',
+        }).then(r => r.json())
+        if (!job.running) {
+          return job.error ? { error: job.error } : (job.result ?? {})
+        }
+      } catch {
+        // transient network error while polling — keep trying
+      }
+    }
+  }
+
+  async function startJob(url) {
     setSyncing(true)
     setResult(null)
     onSyncStart?.()
     try {
-      const res = await fetch(`/api/admin/sync/season/${activeSeason.id}`, {
-        method: 'POST',
-        credentials: 'include',
-      })
+      const res = await fetch(url, { method: 'POST', credentials: 'include' })
       const data = await res.json()
       if (!res.ok) {
         setResult({ error: data.error ?? `Server error ${res.status}` })
-      } else {
-        setResult(data)
+        return
       }
+      setResult(await pollJob())
     } catch (e) {
       setResult({ error: String(e) })
     } finally {
@@ -40,13 +55,9 @@ export default function SyncAdmin({ activeSeason, onSyncStart, onSyncEnd }) {
     }
   }
 
-  async function syncPlayer(playerId) {
-    await fetch(`/api/admin/sync/season/${activeSeason.id}/player/${playerId}`, {
-      method: 'POST',
-      credentials: 'include',
-    })
-    loadStatus()
-  }
+  const runSync = () => startJob(`/api/admin/sync/season/${activeSeason.id}`)
+  const syncPlayer = (playerId) =>
+    startJob(`/api/admin/sync/season/${activeSeason.id}/player/${playerId}`)
 
   if (!activeSeason) return <p className={styles.empty}>No season selected.</p>
 
@@ -120,7 +131,7 @@ export default function SyncAdmin({ activeSeason, onSyncStart, onSyncEnd }) {
                   <td>{p.display_name}</td>
                   <td className={styles.center}>{p.entries_this_season}</td>
                   <td className={styles.actions}>
-                    <button className={styles.mutedBtn} onClick={() => syncPlayer(p.id)}>Re-sync</button>
+                    <button className={styles.mutedBtn} onClick={() => syncPlayer(p.id)} disabled={syncing}>Re-sync</button>
                   </td>
                 </tr>
               ))}

@@ -56,12 +56,30 @@ export default function SeasonAdmin({ seasons, activeSeason, setActiveSeason, on
     setSyncResults(r => ({ ...r, [season.id]: null }))
     onSyncStart?.()
     try {
+      // Sync runs as a background job: POST returns 202, then poll until done
       const res = await fetch(`/api/admin/sync/season/${season.id}`, {
         method: 'POST',
         credentials: 'include',
       })
       const data = await res.json()
-      setSyncResults(r => ({ ...r, [season.id]: res.ok ? data : { error: data.error ?? `Server error ${res.status}` } }))
+      if (!res.ok) {
+        setSyncResults(r => ({ ...r, [season.id]: { error: data.error ?? `Server error ${res.status}` } }))
+        return
+      }
+      for (;;) {
+        await new Promise(resolve => setTimeout(resolve, 3000))
+        try {
+          const job = await fetch(`/api/admin/sync/season/${season.id}/job`, {
+            credentials: 'include',
+          }).then(r => r.json())
+          if (!job.running) {
+            setSyncResults(r => ({ ...r, [season.id]: job.error ? { error: job.error } : (job.result ?? {}) }))
+            break
+          }
+        } catch {
+          // transient network error while polling — keep trying
+        }
+      }
     } catch (e) {
       setSyncResults(r => ({ ...r, [season.id]: { error: String(e) } }))
     } finally {
