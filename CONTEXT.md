@@ -183,7 +183,7 @@ SQLite WAL mode is enabled so status-poll reads don't block the long sync write.
 - Admin tab in header only visible when logged in; logging out redirects to Leaderboard
 - Tables are horizontally scrollable on mobile; some columns hidden at ≤560px breakpoint
 - Captains shown in team roster UI but excluded from leaderboard query and point sums
-- `avg_spr` column in player leaderboard is actually `total_points / events_attended` (pts per event), rounded to 1 decimal
+- `points_per_event` field in player leaderboard is `total_points / events_attended`, rounded to 1 decimal (renamed from the misleading `avg_spr`)
 
 ---
 

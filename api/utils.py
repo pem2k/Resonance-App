@@ -20,8 +20,11 @@ def calculate_spr(seed: int, placement: int, total_entrants: int) -> int:
     """
     if seed <= 0 or placement <= 0 or total_entrants <= 0:
         raise ValueError("seed, placement, and total_entrants must be positive integers")
-    if seed > total_entrants or placement > total_entrants:
-        raise ValueError("seed and placement cannot exceed total_entrants")
+    # start.gg can report seeds/placements above numEntrants after DQs or
+    # bracket pruning. Clamp to N: both mean "expected/finished dead last",
+    # i.e. zero rounds — same as seed/placement == N.
+    seed = min(seed, total_entrants)
+    placement = min(placement, total_entrants)
 
     seed_rounds = math.floor(math.log2(total_entrants / seed))
     placement_rounds = math.floor(math.log2(total_entrants / placement))

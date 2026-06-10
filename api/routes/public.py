@@ -82,7 +82,7 @@ def season_players(season_id):
             **player.to_dict(),
             "total_points": total_points or 0,
             "events_attended": events_attended or 0,
-            "avg_spr": round((total_points or 0) / events_attended, 1) if events_attended else None,
+            "points_per_event": round((total_points or 0) / events_attended, 1) if events_attended else None,
             "team": player_team.get(player.id),
         }
         for player, total_points, events_attended in rows
@@ -113,6 +113,7 @@ def get_team(team_id):
             .filter(
                 TournamentEntry.player_id.in_(player_ids),
                 Tournament.season_id == team.season_id,
+                Tournament.removed == False,
             )
             .scalar() or 0
         )
@@ -128,6 +129,7 @@ def get_player(player_id):
         TournamentEntry.query
         .filter_by(player_id=player_id)
         .join(Tournament)
+        .filter(Tournament.removed == False)
         .order_by(Tournament.date.desc())
         .all()
     )

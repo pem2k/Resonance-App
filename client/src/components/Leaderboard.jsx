@@ -103,7 +103,7 @@ export default function Leaderboard({ season, seasons, onSeasonChange, standings
                       {player.events_attended}
                     </td>
                     <td className={styles.center}>
-                      <SPRBadge value={player.avg_spr} />
+                      <SPRBadge value={player.points_per_event} />
                     </td>
                     <td className={`${styles.points} ${styles.center}`}>
                       {player.total_points}

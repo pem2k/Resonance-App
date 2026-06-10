@@ -128,10 +128,26 @@ def add_to_roster(team_id):
     team = db.get_or_404(Team, team_id)
     data = request.get_json()
     player = db.get_or_404(Player, data["player_id"])
+    # A player on two rosters in the same season would double-count points
+    other = _team_in_season_with_player(team.season_id, player, exclude_team_id=team.id)
+    if other:
+        return jsonify({
+            "error": f"{player.display_name} is already on '{other.name}' in this season"
+        }), 409
     if player not in team.roster:
         team.roster.append(player)
         db.session.commit()
     return jsonify(team.to_dict(include_roster=True))
+
+
+def _team_in_season_with_player(season_id, player, exclude_team_id=None):
+    """Return the team in this season whose roster contains player, if any."""
+    for t in Team.query.filter_by(season_id=season_id).all():
+        if t.id == exclude_team_id:
+            continue
+        if player in t.roster:
+            return t
+    return None
 
 
 @admin.route("/teams/<int:team_id>/roster/<int:player_id>", methods=["DELETE"])
@@ -176,8 +192,15 @@ def update_tournament(tournament_id):
         tournament.startgg_id = data["startgg_id"]
     if "startgg_slug" in data:
         tournament.startgg_slug = data["startgg_slug"]
-    if "total_entrants" in data:
+    if "total_entrants" in data and data["total_entrants"] != tournament.total_entrants:
         tournament.total_entrants = data["total_entrants"]
+        # SPR/points are derived from total_entrants — recompute all entries
+        try:
+            for entry in tournament.entries:
+                entry.compute()
+        except ValueError as exc:
+            db.session.rollback()
+            return jsonify({"error": str(exc)}), 400
     db.session.commit()
     return jsonify(tournament.to_dict())
 
@@ -224,8 +247,14 @@ def create_entry(tournament_id):
         seed=data.get("seed"),
         placement=data.get("placement"),
     )
-    entry.compute()
     db.session.add(entry)
+    # Flush first so entry.tournament resolves — compute() needs total_entrants
+    db.session.flush()
+    try:
+        entry.compute()
+    except ValueError as exc:
+        db.session.rollback()
+        return jsonify({"error": str(exc)}), 400
     db.session.commit()
     return jsonify(entry.to_dict()), 201
 
@@ -238,7 +267,11 @@ def update_entry(entry_id):
         entry.seed = data["seed"]
     if "placement" in data:
         entry.placement = data["placement"]
-    entry.compute()
+    try:
+        entry.compute()
+    except ValueError as exc:
+        db.session.rollback()
+        return jsonify({"error": str(exc)}), 400
     db.session.commit()
     return jsonify(entry.to_dict())
 
@@ -315,6 +348,12 @@ def import_season(season_id):
 
         for pname, pslug in players_data:
             player = _find_or_create_player(pname, pslug, results)
+            other = _team_in_season_with_player(season_id, player, exclude_team_id=team.id)
+            if other:
+                results["errors"].append(
+                    f"'{player.display_name}' already on '{other.name}' — skipped for '{team_name}'"
+                )
+                continue
             if player not in team.roster:
                 team.roster.append(player)
 

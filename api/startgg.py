@@ -59,13 +59,13 @@ def _gql(query: str, variables: dict, _retry: int = 3) -> dict:
 
 # Phase 1: get the user's player ID and list of events they attended (no entrant data)
 _GET_USER_EVENTS_QUERY = """
-query GetPlayerEvents($slug: String!, $page: Int!, $perPage: Int!) {
+query GetPlayerEvents($slug: String!, $page: Int!, $perPage: Int!, $videogameIds: [ID]) {
   user(slug: $slug) {
     player { id }
     events(query: {
       page: $page
       perPage: $perPage
-      filter: { videogameId: [1] }
+      filter: { videogameId: $videogameIds }
     }) {
       pageInfo { totalPages }
       nodes {
@@ -92,6 +92,7 @@ query GetEventEntrants($eventId: ID!, $page: Int!, $perPage: Int!) {
     entrants(query: { page: $page, perPage: $perPage }) {
       pageInfo { totalPages }
       nodes {
+        initialSeedNum
         seeds { seedNum }
         standing { placement }
         participants {
@@ -173,6 +174,7 @@ def get_player_events(
             "slug": user_slug,
             "page": page,
             "perPage": _EVENTS_PER_PAGE,
+            "videogameIds": [MELEE_GAME_ID],
         })
 
         user = data.get("user")
@@ -211,8 +213,14 @@ def get_player_events(
         event_id = str(node["id"])
         entrant = _find_entrant_for_player(event_id, player_id)
 
-        seeds = entrant.get("seeds") or []
-        seed = min((s["seedNum"] for s in seeds), default=None)
+        # Prefer initialSeedNum (the event-wide initial seed). Falling back to
+        # min(seedNum) is wrong for multi-phase events: later phases (e.g. a
+        # top-24 bracket after pools) renumber seeds 1..k, so the min would
+        # understate the player's true seed and deflate their SPR.
+        seed = entrant.get("initialSeedNum")
+        if seed is None:
+            seeds = entrant.get("seeds") or []
+            seed = min((s["seedNum"] for s in seeds), default=None)
 
         standing = entrant.get("standing") or {}
         placement = standing.get("placement")

@@ -6,7 +6,12 @@ results within the season's sync window, auto-creates tournament records,
 and upserts TournamentEntry rows with SPR + points computed.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
+
+# League operates in the Pacific Northwest — sync windows are interpreted
+# in local time so tournaments on the boundary dates aren't dropped.
+_LEAGUE_TZ = ZoneInfo("America/Los_Angeles")
 
 from api.extensions import db
 from api.models import Player, Tournament, TournamentEntry
@@ -28,8 +33,7 @@ def sync_season(season) -> dict:
             "Set them via PUT /api/admin/seasons/<id>."
         )
 
-    after_ts = _to_timestamp(season.sync_from)
-    before_ts = _to_timestamp(season.sync_to)
+    after_ts, before_ts = _sync_window(season)
 
     players = _rostered_players(season)
     syncable = [p for p in players if p.startgg_slug]
@@ -58,7 +62,9 @@ def sync_season(season) -> dict:
                 "error": str(exc),
             })
 
-    result["tournaments_auto_removed"] = _deduplicate_tournaments(season)
+    removed, stranded = _deduplicate_tournaments(season)
+    result["tournaments_auto_removed"] = removed
+    result["entries_stranded_by_dedup"] = stranded
     return result
 
 
@@ -67,13 +73,18 @@ def sync_player(player: Player, season) -> dict:
     if not season.sync_from or not season.sync_to:
         raise ValueError("Season sync_from and sync_to must be set.")
 
-    after_ts = _to_timestamp(season.sync_from)
-    before_ts = _to_timestamp(season.sync_to)
+    after_ts, before_ts = _sync_window(season)
 
     created, upserted, pending = _sync_player(player, season, after_ts, before_ts)
     db.session.commit()
-    auto_removed = _deduplicate_tournaments(season)
-    return {"tournaments_created": created, "entries_upserted": upserted, "entries_pending": pending, "tournaments_auto_removed": auto_removed}
+    auto_removed, stranded = _deduplicate_tournaments(season)
+    return {
+        "tournaments_created": created,
+        "entries_upserted": upserted,
+        "entries_pending": pending,
+        "tournaments_auto_removed": auto_removed,
+        "entries_stranded_by_dedup": stranded,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -96,10 +107,10 @@ def _sync_player(
     season,
     after_ts: int,
     before_ts: int,
-) -> tuple[int, int]:
+) -> tuple[int, int, int]:
     """
     Fetch this player's events from start.gg and upsert entries.
-    Returns (tournaments_created, entries_upserted).
+    Returns (tournaments_created, entries_upserted, pending_results).
     """
     events = startgg.get_player_events(player.startgg_slug, after_ts, before_ts)
 
@@ -143,15 +154,22 @@ def _get_or_create_tournament(ev: dict, season) -> Tournament | None:
     Look up a tournament by its start.gg event ID; create it if new.
     Stamps _created=True on the object when newly created.
     """
+    # Scoped to this season: the same start.gg event may legitimately exist
+    # as a separate Tournament row in another (e.g. overlapping) season.
     tournament = Tournament.query.filter_by(
-        startgg_event_id=ev["event_id"]
+        startgg_event_id=ev["event_id"],
+        season_id=season.id,
     ).first()
 
     if tournament:
         if tournament.removed:
             return None  # excluded from sync
-        # Keep total_entrants up to date
-        tournament.total_entrants = ev["num_entrants"]
+        # Keep total_entrants up to date; N changed → stored SPR/points of
+        # every existing entry are stale, so recompute them all.
+        if tournament.total_entrants != ev["num_entrants"]:
+            tournament.total_entrants = ev["num_entrants"]
+            for entry in tournament.entries:
+                entry.compute()
         tournament._created = False
         return tournament
 
@@ -172,11 +190,14 @@ def _get_or_create_tournament(ev: dict, season) -> Tournament | None:
     return tournament
 
 
-def _deduplicate_tournaments(season) -> int:
+def _deduplicate_tournaments(season) -> tuple[int, list[dict]]:
     """
     For each startgg_id that appears in more than one active tournament in this
     season, keep the one with the most entrants and soft-remove the rest.
-    Returns the number of tournaments auto-removed.
+
+    Returns (tournaments_removed, stranded_entries) where stranded_entries
+    lists players whose entry lived only on a removed duplicate bracket (so
+    their points dropped from standings — an admin should review these).
     """
     active = Tournament.query.filter_by(season_id=season.id, removed=False).all()
 
@@ -186,24 +207,46 @@ def _deduplicate_tournaments(season) -> int:
             groups.setdefault(t.startgg_id, []).append(t)
 
     count = 0
+    stranded = []
     for group in groups.values():
         if len(group) <= 1:
             continue
         group.sort(key=lambda t: t.total_entrants or 0, reverse=True)
+        kept = group[0]
+        kept_player_ids = {e.player_id for e in kept.entries}
         for t in group[1:]:
             t.removed = True
             count += 1
+            for e in t.entries:
+                if e.player_id not in kept_player_ids:
+                    stranded.append({
+                        "player": e.player.display_name if e.player else e.player_id,
+                        "removed_tournament": t.name,
+                        "kept_tournament": kept.name,
+                        "points_dropped": e.points,
+                    })
 
     if count:
         db.session.commit()
 
-    return count
+    return count, stranded
 
 
-def _to_timestamp(d) -> int:
-    """Convert a date or datetime to a Unix timestamp (seconds)."""
-    if hasattr(d, "date"):
-        # it's a datetime
-        return int(d.replace(tzinfo=timezone.utc).timestamp())
-    # it's a date
-    return int(datetime(d.year, d.month, d.day, tzinfo=timezone.utc).timestamp())
+def _sync_window(season) -> tuple[int, int]:
+    """
+    Convert the season's sync_from/sync_to dates into an inclusive Unix
+    timestamp window [start of sync_from, end of sync_to] in league-local
+    time, so tournaments held on either boundary date are included.
+    """
+    after_ts = _start_of_day(season.sync_from)
+    # End of sync_to = start of the following day (exclusive bound, but the
+    # comparison in startgg.get_player_events uses `>`, so subtract 1s).
+    before_ts = _start_of_day(season.sync_to + timedelta(days=1)) - 1
+    return after_ts, before_ts
+
+
+def _start_of_day(d) -> int:
+    """Unix timestamp for midnight at the start of date `d`, league-local time."""
+    if isinstance(d, datetime):
+        d = d.date()
+    return int(datetime(d.year, d.month, d.day, tzinfo=_LEAGUE_TZ).timestamp())
