@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { requestJson } from '../api'
 import styles from './TournamentAdmin.module.css'
 
 export default function TournamentAdmin({ seasonId }) {
@@ -6,39 +7,56 @@ export default function TournamentAdmin({ seasonId }) {
   const [removed, setRemoved] = useState([])
   const [loading, setLoading] = useState(true)
   const [acting, setActing] = useState(null)
+  const [error, setError] = useState(null)
 
   async function load() {
     setLoading(true)
-    const [active, gone] = await Promise.all([
-      fetch(`/api/seasons/${seasonId}/tournaments`).then(r => r.json()),
-      fetch(`/api/admin/seasons/${seasonId}/removed-tournaments`, { credentials: 'include' }).then(r => r.json()),
-    ])
-    setTournaments(active)
-    setRemoved(gone)
-    setLoading(false)
+    try {
+      const [active, gone] = await Promise.all([
+        requestJson(`/api/seasons/${seasonId}/tournaments`),
+        requestJson(`/api/admin/seasons/${seasonId}/removed-tournaments`, { credentials: 'include' }),
+      ])
+      setTournaments(active)
+      setRemoved(gone)
+      setError(null)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
   }
 
   useEffect(() => { load() }, [seasonId])
 
   async function handleRemove(t) {
-    if (!confirm(`Remove "${t.name}"? It will be excluded from standings and future syncs, but can be restored.`)) return
+    if (!window.confirm(`Remove "${t.name}"? It will be excluded from standings and future syncs, but can be restored.`)) return
     setActing(t.id)
-    await fetch(`/api/admin/tournaments/${t.id}`, {
-      method: 'DELETE',
-      credentials: 'include',
-    })
-    setActing(null)
-    load()
+    try {
+      await requestJson(`/api/admin/tournaments/${t.id}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      })
+      await load()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setActing(null)
+    }
   }
 
   async function handleRestore(t) {
     setActing(t.id)
-    await fetch(`/api/admin/tournaments/${t.id}/restore`, {
-      method: 'POST',
-      credentials: 'include',
-    })
-    setActing(null)
-    load()
+    try {
+      await requestJson(`/api/admin/tournaments/${t.id}/restore`, {
+        method: 'POST',
+        credentials: 'include',
+      })
+      await load()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setActing(null)
+    }
   }
 
   return (
@@ -48,6 +66,7 @@ export default function TournamentAdmin({ seasonId }) {
         Remove online events or tournaments that shouldn't count toward points.
         Removed tournaments are excluded from standings and future syncs but can be restored.
       </p>
+      {error && <p className={styles.error} role="alert">{error}</p>}
 
       {loading ? (
         <p className={styles.muted}>Loading…</p>
@@ -65,7 +84,7 @@ export default function TournamentAdmin({ seasonId }) {
                     <th className={styles.center}>Date</th>
                     <th className={styles.center}>Entrants</th>
                     <th className={styles.center}>Entries</th>
-                    <th />
+                    <th><span className={styles.srOnly}>Actions</span></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -87,9 +106,9 @@ export default function TournamentAdmin({ seasonId }) {
                           <button
                             className={styles.deleteBtn}
                             onClick={() => handleRemove(t)}
-                            disabled={acting === t.id}
+                            disabled={acting !== null}
                           >
-                            {acting === t.id ? '…' : 'Remove'}
+                              {acting === t.id ? '…' : 'Remove'}
                           </button>
                         </td>
                       </tr>
@@ -112,7 +131,7 @@ export default function TournamentAdmin({ seasonId }) {
                       <th className={styles.center}>Date</th>
                       <th className={styles.center}>Entrants</th>
                       <th className={styles.center}>Entries</th>
-                      <th />
+                      <th><span className={styles.srOnly}>Actions</span></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -134,7 +153,7 @@ export default function TournamentAdmin({ seasonId }) {
                             <button
                               className={styles.restoreBtn}
                               onClick={() => handleRestore(t)}
-                              disabled={acting === t.id}
+                              disabled={acting !== null}
                             >
                               {acting === t.id ? '…' : 'Restore'}
                             </button>

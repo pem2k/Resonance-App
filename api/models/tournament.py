@@ -1,3 +1,5 @@
+from datetime import timezone
+
 from api.extensions import db
 
 
@@ -23,6 +25,9 @@ class Tournament(db.Model):
     entries = db.relationship("TournamentEntry", back_populates="tournament", cascade="all, delete-orphan")
 
     def to_dict(self):
+        synced_at = self.synced_at
+        if synced_at and synced_at.tzinfo is None:
+            synced_at = synced_at.replace(tzinfo=timezone.utc)
         return {
             "id": self.id,
             "name": self.name,
@@ -31,6 +36,6 @@ class Tournament(db.Model):
             "startgg_id": self.startgg_id,
             "startgg_slug": self.startgg_slug,
             "total_entrants": self.total_entrants,
-            "synced_at": self.synced_at.isoformat() if self.synced_at else None,
+            "synced_at": synced_at.isoformat().replace("+00:00", "Z") if synced_at else None,
             "removed": self.removed,
         }

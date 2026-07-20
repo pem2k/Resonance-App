@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import SeasonAdmin from './SeasonAdmin'
 import PlayerAdmin from './PlayerAdmin'
 import SyncAdmin from './SyncAdmin'
@@ -18,6 +18,13 @@ export default function AdminPanel({ seasons, onSeasonsChange }) {
   const [section, setSection] = useState('seasons')
   const [activeSeason, setActiveSeason] = useState(seasons[0] ?? null)
   const [syncCount, setSyncCount] = useState(0)
+
+  useEffect(() => {
+    setActiveSeason(current => {
+      if (!current) return seasons[0] ?? null
+      return seasons.find(season => season.id === current.id) ?? seasons[0] ?? null
+    })
+  }, [seasons])
 
   function onSyncStart() { setSyncCount(n => n + 1) }
   function onSyncEnd()   { setSyncCount(n => Math.max(0, n - 1)) }

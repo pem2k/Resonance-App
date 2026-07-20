@@ -1,27 +1,30 @@
 import os
 import click
 from datetime import timedelta
-from flask import Flask, send_from_directory
+from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 from dotenv import load_dotenv
+from werkzeug.exceptions import HTTPException
 from api.extensions import db, limiter
-
-load_dotenv()
 
 
 _DIST = os.path.join(os.path.dirname(__file__), "..", "client", "dist")
 
 
-def create_app():
+def create_app(config=None):
+    config = config or {}
+    if not config.get("TESTING"):
+        load_dotenv()
+
     app = Flask(__name__, static_folder=_DIST, static_url_path="")
 
     # ── Core config ──────────────────────────────────────────────────────────
-    secret = os.environ.get("SECRET_KEY", "")
+    secret = config.get("SECRET_KEY") or os.environ.get("SECRET_KEY", "")
     if not secret:
         raise RuntimeError("SECRET_KEY environment variable must be set.")
     app.config["SECRET_KEY"] = secret
 
-    db_url = os.getenv("DATABASE_URL", "sqlite:///resonance.db")
+    db_url = config.get("SQLALCHEMY_DATABASE_URI") or os.getenv("DATABASE_URL", "sqlite:///resonance.db")
     # Heroku-style URLs use the deprecated postgres:// scheme; SQLAlchemy 2.x
     # only accepts postgresql://
     if db_url.startswith("postgres://"):
@@ -38,6 +41,8 @@ def create_app():
         }
     else:
         app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {"pool_pre_ping": True}
+
+    app.config.update(config)
 
     # ── Session / cookie security ─────────────────────────────────────────────
     app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=8)
@@ -62,6 +67,12 @@ def create_app():
     app.register_blueprint(sync_bp)
     app.register_blueprint(auth)
 
+    @app.errorhandler(HTTPException)
+    def api_http_error(error):
+        if request.path.startswith("/api/"):
+            return jsonify({"error": error.description}), error.code
+        return error
+
     with app.app_context():
         db.create_all()
         if is_sqlite:
@@ -71,6 +82,21 @@ def create_app():
             db.session.commit()
 
     # ── CLI commands ──────────────────────────────────────────────────────────
+    @app.cli.command("auto-sync")
+    def auto_sync():
+        """Sync all active seasons that have a sync window set. Run via Heroku Scheduler."""
+        from api import sync as sync_service
+        seasons = Season.query.filter_by(status="active").all()
+        synced = 0
+        for s in seasons:
+            if s.sync_from and s.sync_to:
+                click.echo(f"Syncing season: {s.name} …")
+                result = sync_service.sync_season(s)
+                click.echo(f"  done — {result}")
+                synced += 1
+        if not synced:
+            click.echo("No active seasons with a sync window found.")
+
     @app.cli.command("create-admin")
     @click.argument("username")
     def create_admin(username):

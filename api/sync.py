@@ -72,6 +72,10 @@ def sync_player(player: Player, season) -> dict:
     """Force re-sync a single player for the season window."""
     if not season.sync_from or not season.sync_to:
         raise ValueError("Season sync_from and sync_to must be set.")
+    if player.id not in {rostered.id for rostered in _rostered_players(season)}:
+        raise ValueError("Player is not rostered in this season.")
+    if not player.startgg_slug or not player.startgg_slug.strip():
+        raise ValueError("Player must have a start.gg slug before syncing.")
 
     after_ts, before_ts = _sync_window(season)
 
@@ -79,11 +83,16 @@ def sync_player(player: Player, season) -> dict:
     db.session.commit()
     auto_removed, stranded = _deduplicate_tournaments(season)
     return {
+        # Keep the background-job result contract identical to a season sync
+        # so the shared admin result view can render either operation safely.
+        "players_synced": 1,
+        "players_skipped": 0,
         "tournaments_created": created,
         "entries_upserted": upserted,
         "entries_pending": pending,
         "tournaments_auto_removed": auto_removed,
         "entries_stranded_by_dedup": stranded,
+        "errors": [],
     }
 
 
@@ -144,6 +153,7 @@ def _sync_player(
         entry.placement = ev["placement"]
         db.session.flush()
         entry.compute()
+        tournament.synced_at = datetime.now(timezone.utc).replace(tzinfo=None)
         entries_upserted += 1
 
     return tournaments_created, entries_upserted, pending_results
@@ -156,6 +166,10 @@ def _get_or_create_tournament(ev: dict, season) -> Tournament | None:
     """
     # Scoped to this season: the same start.gg event may legitimately exist
     # as a separate Tournament row in another (e.g. overlapping) season.
+    local_date = datetime.fromtimestamp(
+        ev["tournament_date"], tz=_LEAGUE_TZ
+    ).date()
+
     tournament = Tournament.query.filter_by(
         startgg_event_id=ev["event_id"],
         season_id=season.id,
@@ -164,6 +178,8 @@ def _get_or_create_tournament(ev: dict, season) -> Tournament | None:
     if tournament:
         if tournament.removed:
             return None  # excluded from sync
+        # Repair dates previously derived from UTC and keep upstream changes in sync.
+        tournament.date = local_date
         # Keep total_entrants up to date; N changed → stored SPR/points of
         # every existing entry are stale, so recompute them all.
         if tournament.total_entrants != ev["num_entrants"]:
@@ -173,11 +189,9 @@ def _get_or_create_tournament(ev: dict, season) -> Tournament | None:
         tournament._created = False
         return tournament
 
-    t_date = datetime.fromtimestamp(ev["tournament_date"], tz=timezone.utc).date()
-
     tournament = Tournament(
         name=ev["tournament_name"],
-        date=t_date,
+        date=local_date,
         season_id=season.id,
         startgg_id=ev["tournament_id"],
         startgg_slug=ev["tournament_slug"],

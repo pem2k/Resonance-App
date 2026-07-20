@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { requestJson } from './api'
 import Header from './components/Header'
 import Leaderboard from './components/Leaderboard'
 import About from './components/About'
@@ -17,15 +18,14 @@ export default function App() {
 
   // Check if already logged in (persisted session)
   useEffect(() => {
-    fetch('/api/auth/me', { credentials: 'include' })
-      .then(r => r.json())
+    requestJson('/api/auth/me', { credentials: 'include' })
       .then(data => setIsAdmin(data.is_admin))
       .catch(() => {})
   }, [])
 
   async function loadSeasonData() {
     try {
-      const seasonsData = await fetch('/api/seasons').then(r => r.json())
+      const seasonsData = await requestJson('/api/seasons')
       setSeasons(seasonsData)
       const active = seasonsData.find(s => s.status === 'active') ?? seasonsData[0]
       if (!active) { setLoading(false); return }
@@ -41,9 +41,9 @@ export default function App() {
     setError(null)
     try {
       const [standingsData, playersData, tournamentsData] = await Promise.all([
-        fetch(`/api/seasons/${target.id}/standings`).then(r => r.json()),
-        fetch(`/api/seasons/${target.id}/players`).then(r => r.json()),
-        fetch(`/api/seasons/${target.id}/tournaments`).then(r => r.json()),
+        requestJson(`/api/seasons/${target.id}/standings`),
+        requestJson(`/api/seasons/${target.id}/players`),
+        requestJson(`/api/seasons/${target.id}/tournaments`),
       ])
       if (seasonsData) setSeasons(seasonsData)
       setSeason(target)

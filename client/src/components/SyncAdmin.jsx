@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { requestJson } from '../api'
 import styles from './AdminForm.module.css'
 
 export default function SyncAdmin({ activeSeason, onSyncStart, onSyncEnd }) {
@@ -8,10 +9,14 @@ export default function SyncAdmin({ activeSeason, onSyncStart, onSyncEnd }) {
 
   async function loadStatus() {
     if (!activeSeason) return
-    const data = await fetch(`/api/admin/sync/season/${activeSeason.id}/status`, {
-      credentials: 'include',
-    }).then(r => r.json())
-    setStatus(data)
+    try {
+      const data = await requestJson(`/api/admin/sync/season/${activeSeason.id}/status`, {
+        credentials: 'include',
+      })
+      setStatus(data)
+    } catch (err) {
+      setResult({ error: err.message })
+    }
   }
 
   useEffect(() => { loadStatus() }, [activeSeason?.id])
@@ -21,15 +26,11 @@ export default function SyncAdmin({ activeSeason, onSyncStart, onSyncEnd }) {
   async function pollJob() {
     for (;;) {
       await new Promise(r => setTimeout(r, 3000))
-      try {
-        const job = await fetch(`/api/admin/sync/season/${activeSeason.id}/job`, {
-          credentials: 'include',
-        }).then(r => r.json())
-        if (!job.running) {
-          return job.error ? { error: job.error } : (job.result ?? {})
-        }
-      } catch {
-        // transient network error while polling — keep trying
+      const job = await requestJson(`/api/admin/sync/season/${activeSeason.id}/job`, {
+        credentials: 'include',
+      })
+      if (!job.running) {
+        return job.error ? { error: job.error } : (job.result ?? {})
       }
     }
   }
@@ -39,15 +40,10 @@ export default function SyncAdmin({ activeSeason, onSyncStart, onSyncEnd }) {
     setResult(null)
     onSyncStart?.()
     try {
-      const res = await fetch(url, { method: 'POST', credentials: 'include' })
-      const data = await res.json()
-      if (!res.ok) {
-        setResult({ error: data.error ?? `Server error ${res.status}` })
-        return
-      }
+      await requestJson(url, { method: 'POST', credentials: 'include' })
       setResult(await pollJob())
     } catch (e) {
-      setResult({ error: String(e) })
+      setResult({ error: e.message })
     } finally {
       setSyncing(false)
       onSyncEnd?.()
@@ -123,7 +119,7 @@ export default function SyncAdmin({ activeSeason, onSyncStart, onSyncEnd }) {
         <div className={styles.tableWrap}>
           <table className={styles.table}>
             <thead>
-              <tr><th>Player</th><th className={styles.center}>Entries this season</th><th></th></tr>
+              <tr><th>Player</th><th className={styles.center}>Entries this season</th><th><span className={styles.srOnly}>Actions</span></th></tr>
             </thead>
             <tbody>
               {ready.map(p => (

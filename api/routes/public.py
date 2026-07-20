@@ -5,6 +5,12 @@ from api.models import Season, Team, Player, Tournament, TournamentEntry
 public = Blueprint("public", __name__, url_prefix="/api")
 
 
+def _scoring_player_ids(team):
+    if team.captain_id is None:
+        return [p.id for p in team.roster]
+    return [p.id for p in team.roster if p.id != team.captain_id]
+
+
 # --- Seasons ---
 
 @public.route("/seasons", methods=["GET"])
@@ -28,8 +34,8 @@ def season_standings(season_id):
     teams = Team.query.filter_by(season_id=season_id).all()
     results = []
     for team in teams:
-        # Captains are coaches — exclude them from point totals
-        player_ids = [p.id for p in team.roster if p.id != team.captain_id]
+        # No captain assigned means every roster player's points count.
+        player_ids = _scoring_player_ids(team)
         total = 0
         if player_ids:
             total = (
@@ -54,39 +60,53 @@ def season_standings(season_id):
 def season_players(season_id):
     season = db.get_or_404(Season, season_id)
 
-    # Build player → team map and collect captain IDs for this season
+    # Membership comes from current rosters, while totals come from active
+    # tournament entries. This keeps the player and team tables consistent and
+    # retains rostered players who have not attended an event yet.
     player_team = {}
-    captain_ids = set()
+    captain_ids = {team.captain_id for team in season.teams if team.captain_id}
+    eligible_players = {}
     for team in season.teams:
-        if team.captain_id:
-            captain_ids.add(team.captain_id)
         for player in team.roster:
             player_team[player.id] = {"id": team.id, "name": team.name}
+            if player.id not in captain_ids:
+                eligible_players[player.id] = player
 
-    rows = (
-        db.session.query(
-            Player,
-            db.func.sum(TournamentEntry.points).label("total_points"),
-            db.func.count(TournamentEntry.id).label("events_attended"),
+    totals = {}
+    if eligible_players:
+        aggregate_rows = (
+            db.session.query(
+                TournamentEntry.player_id,
+                db.func.sum(TournamentEntry.points).label("total_points"),
+                db.func.count(TournamentEntry.id).label("events_attended"),
+            )
+            .join(Tournament, TournamentEntry.tournament_id == Tournament.id)
+            .filter(
+                TournamentEntry.player_id.in_(eligible_players),
+                Tournament.season_id == season_id,
+                Tournament.removed.is_(False),
+            )
+            .group_by(TournamentEntry.player_id)
+            .all()
         )
-        .join(TournamentEntry, TournamentEntry.player_id == Player.id)
-        .join(Tournament, TournamentEntry.tournament_id == Tournament.id)
-        .filter(Tournament.season_id == season_id, Tournament.removed == False, Player.id.notin_(captain_ids))
-        .group_by(Player.id)
-        .order_by(db.desc("total_points"))
-        .all()
-    )
-
-    return jsonify([
-        {
-            **player.to_dict(),
-            "total_points": total_points or 0,
-            "events_attended": events_attended or 0,
-            "points_per_event": round((total_points or 0) / events_attended, 1) if events_attended else None,
-            "team": player_team.get(player.id),
+        totals = {
+            player_id: (total_points or 0, events_attended or 0)
+            for player_id, total_points, events_attended in aggregate_rows
         }
-        for player, total_points, events_attended in rows
-    ])
+
+    rows = []
+    for player in eligible_players.values():
+        total_points, events_attended = totals.get(player.id, (0, 0))
+        rows.append({
+            **player.to_dict(),
+            "total_points": total_points,
+            "events_attended": events_attended,
+            "points_per_event": round(total_points / events_attended, 1) if events_attended else None,
+            "team": player_team[player.id],
+        })
+
+    rows.sort(key=lambda row: (-row["total_points"], row["display_name"].casefold(), row["id"]))
+    return jsonify(rows)
 
 
 # --- Tournaments in a season ---
@@ -103,8 +123,8 @@ def season_tournaments(season_id):
 @public.route("/teams/<int:team_id>", methods=["GET"])
 def get_team(team_id):
     team = db.get_or_404(Team, team_id)
-    # Captains are coaches — exclude them from point totals
-    player_ids = [p.id for p in team.roster if p.id != team.captain_id]
+    # No captain assigned means every roster player's points count.
+    player_ids = _scoring_player_ids(team)
     total = 0
     if player_ids:
         total = (

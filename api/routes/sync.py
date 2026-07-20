@@ -1,5 +1,5 @@
 import threading
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from flask import Blueprint, jsonify, current_app
 from api.extensions import db
@@ -81,9 +81,16 @@ def sync_season(season_id):
 def sync_player(season_id, player_id):
     """Start a background re-sync of a single player within the season window."""
     season = db.get_or_404(Season, season_id)
-    db.get_or_404(Player, player_id)
+    player = db.get_or_404(Player, player_id)
     if not season.sync_from or not season.sync_to:
         return jsonify({"error": "Season sync_from and sync_to must be set."}), 400
+    rostered_ids = {
+        rostered.id for team in season.teams for rostered in team.roster
+    }
+    if player.id not in rostered_ids:
+        return jsonify({"error": "Player is not rostered in this season."}), 400
+    if not player.startgg_slug or not player.startgg_slug.strip():
+        return jsonify({"error": "Player must have a start.gg slug before syncing."}), 400
 
     def task(sid, pid):
         s = db.session.get(Season, sid)
@@ -110,17 +117,25 @@ def sync_status(season_id):
     season = db.get_or_404(Season, season_id)
 
     players = []
+    seen_player_ids = set()
     for team in season.teams:
         for player in team.roster:
+            if player.id in seen_player_ids:
+                continue
+            seen_player_ids.add(player.id)
             entry_count = sum(
                 1 for e in player.entries
-                if e.tournament and e.tournament.season_id == season_id
+                if (
+                    e.tournament
+                    and e.tournament.season_id == season_id
+                    and not e.tournament.removed
+                )
             )
             players.append({
                 "id": player.id,
                 "display_name": player.display_name,
                 "startgg_slug": player.startgg_slug,
-                "has_slug": player.startgg_slug is not None,
+                "has_slug": bool(player.startgg_slug and player.startgg_slug.strip()),
                 "entries_this_season": entry_count,
             })
 
@@ -135,8 +150,11 @@ def sync_status(season_id):
                 "date": t.date.isoformat() if t.date else None,
                 "total_entrants": t.total_entrants,
                 "entry_count": len(t.entries),
-                "synced_at": t.synced_at.isoformat() if t.synced_at else None,
+                "synced_at": t.to_dict()["synced_at"],
             }
-            for t in sorted(season.tournaments, key=lambda t: t.date or "")
+            for t in sorted(
+                (t for t in season.tournaments if not t.removed),
+                key=lambda t: t.date or date.min,
+            )
         ],
     })

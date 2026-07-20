@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { requestJson } from '../api'
 import styles from './AdminForm.module.css'
 
 export default function SeasonAdmin({ seasons, activeSeason, setActiveSeason, onSeasonsChange, onSyncStart, onSyncEnd }) {
@@ -9,6 +10,7 @@ export default function SeasonAdmin({ seasons, activeSeason, setActiveSeason, on
   const [syncing, setSyncing] = useState(null)   // season id currently syncing
   const [syncResults, setSyncResults] = useState({})  // season id → result
   const [msg, setMsg] = useState(null)
+  const [error, setError] = useState(null)
 
   function field(key, value) {
     setForm(f => ({ ...f, [key]: value }))
@@ -17,37 +19,45 @@ export default function SeasonAdmin({ seasons, activeSeason, setActiveSeason, on
   async function createSeason(e) {
     e.preventDefault()
     setSaving(true)
-    const res = await fetch('/api/admin/seasons', {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(form),
-    })
-    const data = await res.json()
-    setSaving(false)
-    if (res.ok) {
+    setMsg(null)
+    setError(null)
+    try {
+      await requestJson('/api/admin/seasons', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form),
+      })
       setMsg('Season created.')
       setCreating(false)
       setForm({ name: '', start_date: '', end_date: '', sync_from: '', sync_to: '', status: 'draft' })
       onSeasonsChange()
-    } else {
-      setMsg(data.error ?? 'Error creating season.')
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSaving(false)
     }
   }
 
   async function updateSeason(season) {
     setSaving(true)
     const patch = editing[season.id] ?? {}
-    const res = await fetch(`/api/admin/seasons/${season.id}`, {
-      method: 'PUT',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(patch),
-    })
-    setSaving(false)
-    if (res.ok) {
+    setMsg(null)
+    setError(null)
+    try {
+      await requestJson(`/api/admin/seasons/${season.id}`, {
+        method: 'PUT',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch),
+      })
       setMsg(`${season.name} updated.`)
+      setEditing(current => ({ ...current, [season.id]: {} }))
       onSeasonsChange()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -57,31 +67,22 @@ export default function SeasonAdmin({ seasons, activeSeason, setActiveSeason, on
     onSyncStart?.()
     try {
       // Sync runs as a background job: POST returns 202, then poll until done
-      const res = await fetch(`/api/admin/sync/season/${season.id}`, {
+      await requestJson(`/api/admin/sync/season/${season.id}`, {
         method: 'POST',
         credentials: 'include',
       })
-      const data = await res.json()
-      if (!res.ok) {
-        setSyncResults(r => ({ ...r, [season.id]: { error: data.error ?? `Server error ${res.status}` } }))
-        return
-      }
       for (;;) {
         await new Promise(resolve => setTimeout(resolve, 3000))
-        try {
-          const job = await fetch(`/api/admin/sync/season/${season.id}/job`, {
-            credentials: 'include',
-          }).then(r => r.json())
-          if (!job.running) {
-            setSyncResults(r => ({ ...r, [season.id]: job.error ? { error: job.error } : (job.result ?? {}) }))
-            break
-          }
-        } catch {
-          // transient network error while polling — keep trying
+        const job = await requestJson(`/api/admin/sync/season/${season.id}/job`, {
+          credentials: 'include',
+        })
+        if (!job.running) {
+          setSyncResults(r => ({ ...r, [season.id]: job.error ? { error: job.error } : (job.result ?? {}) }))
+          break
         }
       }
     } catch (e) {
-      setSyncResults(r => ({ ...r, [season.id]: { error: String(e) } }))
+      setSyncResults(r => ({ ...r, [season.id]: { error: e.message } }))
     } finally {
       setSyncing(null)
       onSyncEnd?.()
@@ -98,7 +99,8 @@ export default function SeasonAdmin({ seasons, activeSeason, setActiveSeason, on
 
   return (
     <div className={styles.root}>
-      {msg && <p className={styles.msg}>{msg}</p>}
+      {msg && <p className={styles.msg} role="status" aria-live="polite">{msg}</p>}
+      {error && <p className={styles.error} role="alert">{error}</p>}
 
       {/* Existing seasons */}
       {seasons.map(season => (
@@ -135,7 +137,7 @@ export default function SeasonAdmin({ seasons, activeSeason, setActiveSeason, on
             <button
               className={styles.syncBtn}
               onClick={() => runSync(season)}
-              disabled={syncing === season.id || !season.sync_from}
+              disabled={syncing !== null || !season.sync_from}
               title={!season.sync_from ? 'Set sync dates first' : undefined}
             >
               {syncing === season.id ? 'Syncing…' : 'Sync now'}

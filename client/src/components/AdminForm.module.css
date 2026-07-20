@@ -4,6 +4,18 @@
   gap: 20px;
 }
 
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 /* Cards */
 .card {
   background: var(--bg-secondary);
@@ -202,6 +214,7 @@
 }
 
 .deleteSmall:hover { background: rgba(237, 66, 69, 0.15); color: #ed4245; }
+.deleteSmall:disabled { opacity: 0.45; cursor: not-allowed; }
 
 /* Table — always use table-cell layout, no display:flex on td */
 .table {
@@ -254,7 +267,18 @@
   flex-wrap: wrap;
 }
 
-.inlineForm input {
+.inlineForm label {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 220px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.inlineForm input,
+.inlineForm select {
   background: var(--bg-primary);
   border: 1px solid var(--border);
   border-radius: 4px;
@@ -265,7 +289,8 @@
   min-width: 120px;
 }
 
-.inlineForm input:focus {
+.inlineForm input:focus,
+.inlineForm select:focus {
   outline: none;
   border-color: var(--accent);
 }

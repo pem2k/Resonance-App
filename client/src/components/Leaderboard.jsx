@@ -14,6 +14,11 @@ function RankCell({ rank }) {
   return <span className={styles.muted}>{rank}</span>
 }
 
+function captainLabel(captain) {
+  if (!captain) return '—'
+  return captain.display_name.toLowerCase() === 'no captain' ? 'n/a' : captain.display_name
+}
+
 export default function Leaderboard({ season, seasons, onSeasonChange, standings, players, tournaments, loading, error }) {
   if (loading) return <p className={styles.state}>Loading...</p>
   if (error)   return <p className={styles.state}>{error}</p>
@@ -61,10 +66,10 @@ export default function Leaderboard({ season, seasons, onSeasonChange, standings
                     <td><RankCell rank={i + 1} /></td>
                     <td className={`${styles.teamName} ${styles.center}`}>{team.name}</td>
                     <td className={`${styles.secondary} ${styles.center}`}>
-                      {team.captain?.display_name ?? '—'}
+                      {captainLabel(team.captain)}
                     </td>
                     <td className={`${styles.secondary} ${styles.center}`}>
-                      {team.roster?.length ?? 0}/5
+                      {team.roster?.length ?? 0}
                     </td>
                     <td className={`${styles.points} ${styles.center}`}>
                       {team.total_points}
