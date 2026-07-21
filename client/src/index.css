@@ -5,20 +5,58 @@
 }
 
 :root {
-  --bg-primary:   #313338;
-  --bg-secondary: #2b2d31;
-  --bg-tertiary:  #1e1f22;
-  --bg-card:      #383a40;
-  --bg-hover:     #3f4147;
-  --text-primary:   #f2f3f5;
-  --text-secondary: #b5bac1;
-  --text-muted:     #80848e;
-  --accent:       #5865f2;
-  --accent-hover: #4752c4;
-  --border:       #3f4147;
-  --green:        #3ba55c;
-  --red:          #ed4245;
-  --gold:         #faa61a;
+  /* Approved Resonance brand palette */
+  --resonance-primary: #85151d;
+  --resonance-deep: #460912;
+  --resonance-neutral: #e6e6e6;
+  --resonance-white: #ffffff;
+  --resonance-black: #010101;
+
+  /* Dark surfaces derived from the brand palette */
+  --bg-primary: var(--resonance-black);
+  --bg-secondary: var(--resonance-deep);
+  --bg-tertiary: #2d0509;
+  --bg-card: var(--resonance-deep);
+  --bg-hover: var(--resonance-primary);
+
+  /* Accessible content and interaction colors */
+  --text-primary: var(--resonance-white);
+  --text-secondary: var(--resonance-neutral);
+  --text-muted: #c7c7c7;
+  --link-text: #ffb3b8;
+  --accent: #ffb3b8;
+  --accent-hover: #ffffff;
+  --action-bg: var(--resonance-primary);
+  --action-hover: var(--resonance-deep);
+  --action-text: var(--resonance-white);
+  --action-border: var(--resonance-neutral);
+  --border: #a88c8e;
+  --focus-ring: var(--resonance-white);
+  --overlay: rgba(1, 1, 1, 0.78);
+
+  /* Semantic feedback and ranking colors */
+  --success: #8bd49c;
+  --success-bg: #0e2915;
+  --success-border: #6aab7a;
+  --warning: #ffd166;
+  --warning-bg: #2b2004;
+  --warning-border: #b89b48;
+  --danger: #ff9a9c;
+  --danger-bg: #3d0f13;
+  --danger-border: #b85e64;
+  --status-draft: #c7c7c7;
+  --status-draft-bg: #33292a;
+  --status-completed: #ffb3b8;
+  --status-completed-bg: #341014;
+  --medal-gold: #ffd166;
+  --medal-silver: var(--resonance-neutral);
+  --medal-bronze: #f0b98f;
+
+}
+
+html {
+  color-scheme: dark;
+  background: var(--bg-primary);
 }
 
 body {
@@ -30,10 +68,30 @@ body {
   min-height: 100vh;
 }
 
+::selection {
+  background: var(--action-bg);
+  color: var(--action-text);
+}
+
+a {
+  color: var(--link-text);
+}
+
 button {
   cursor: pointer;
   border: none;
   background: none;
   font: inherit;
   color: inherit;
+}
+
+button:disabled,
+:where(input, select, textarea):disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+:where(button, a, input, select, textarea):focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
 }

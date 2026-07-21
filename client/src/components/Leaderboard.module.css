@@ -44,9 +44,9 @@
   border-radius: 10px;
 }
 
-.statusPill.active    { background: rgba(59, 165, 92, 0.2);  color: var(--green); }
-.statusPill.draft     { background: rgba(128, 132, 142, 0.2); color: var(--text-muted); }
-.statusPill.completed { background: rgba(88, 101, 242, 0.2);  color: var(--accent); }
+.statusPill.active    { background: var(--success-bg); color: var(--success); }
+.statusPill.draft     { background: var(--status-draft-bg); color: var(--status-draft); }
+.statusPill.completed { background: var(--status-completed-bg); color: var(--status-completed); }
 
 .section {
   display: flex;
@@ -151,9 +151,9 @@
 }
 
 /* Rank */
-.gold   { font-weight: 700; color: #faa61a; }
-.silver { font-weight: 700; color: #b5bac1; }
-.bronze { font-weight: 700; color: #cd7f32; }
+.gold   { font-weight: 700; color: var(--medal-gold); }
+.silver { font-weight: 700; color: var(--medal-silver); }
+.bronze { font-weight: 700; color: var(--medal-bronze); }
 
 /* Average league points per event; intentionally neutral so it cannot be read as SPR. */
 .averagePoints {
