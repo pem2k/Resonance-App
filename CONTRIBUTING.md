@@ -17,8 +17,8 @@ through a reviewed pull request before it reaches that branch.
 5. Run the focused tests plus the relevant full suite, frontend build, and
    browser checks.
 6. Open a pull request linked to the issue and move the issue to **In Review**.
-7. Address or explicitly resolve review findings. Do not merge with failing
-   required checks or unresolved blockers.
+7. Address or explicitly resolve review findings. The backend and frontend CI
+   checks must pass; do not merge with failing checks or unresolved blockers.
 8. Merge the reviewed pull request into `master`, then move the issue to
    **Done**.
 9. Deploy production only from the reviewed `master` branch and smoke test the
@@ -31,4 +31,3 @@ through a reviewed pull request before it reaches that branch.
   backfills, or destructive data work.
 - Include migration, rollback, and live smoke-test notes in the pull request.
 - Keep public and admin authorization checks on the server, not only in the UI.
-

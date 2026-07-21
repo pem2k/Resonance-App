@@ -11,6 +11,7 @@ Closes #
 - [ ] A failing behavior test was added first when feasible.
 - [ ] Focused backend tests pass.
 - [ ] Full relevant backend suite passes.
+- [ ] GitHub Actions backend and frontend checks pass.
 - [ ] Frontend build passes when frontend code changed.
 - [ ] Local browser smoke test covers affected routes and responsive states.
 
