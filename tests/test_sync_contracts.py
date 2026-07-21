@@ -80,6 +80,29 @@ def test_single_player_sync_starts_for_rostered_player(
     start_job.assert_called_once()
 
 
+def test_single_player_sync_starts_for_parry_only_player(
+    admin_client, db, make_season, make_player, make_team
+):
+    season = make_season()
+    season.sync_from = date(2026, 7, 1)
+    season.sync_to = date(2026, 7, 31)
+    player = make_player("Player")
+    player.parrygg_id = "019585f3-1ccf-7c90-bff6-7fdd9a2e5178"
+    make_team(season, players=[player])
+    db.session.commit()
+
+    with patch("api.routes.sync._start_job", return_value=True) as start_job:
+        response = admin_client.post(
+            f"/api/admin/sync/season/{season.id}/player/{player.id}"
+        )
+
+    assert response.status_code == 202
+    start_job.assert_called_once()
+    status = admin_client.get(f"/api/admin/sync/season/{season.id}/status").get_json()
+    assert status["players"][0]["has_source"] is True
+    assert status["players"][0]["parrygg_id"] == player.parrygg_id
+
+
 def test_single_player_sync_returns_the_summary_shape_rendered_by_the_admin_ui(
     make_season, make_player, make_team
 ):
@@ -102,6 +125,65 @@ def test_single_player_sync_returns_the_summary_shape_rendered_by_the_admin_ui(
         "entries_stranded_by_dedup": [],
         "errors": [],
     }
+
+
+def test_dual_source_sync_keeps_startgg_results_when_parry_fails(
+    db, make_season, make_player, make_team
+):
+    season = make_season()
+    season.sync_from = date(2026, 7, 1)
+    season.sync_to = date(2026, 7, 31)
+    player = make_player("Player", "user/player")
+    player.parrygg_id = "019585f3-1ccf-7c90-bff6-7fdd9a2e5178"
+    make_team(season, players=[player])
+    db.session.commit()
+    event = {**_event(1_784_442_600), "seed": 8, "placement": 4}
+
+    with (
+        patch("api.sync.startgg.get_player_events", return_value=[event]),
+        patch("api.sync.parrygg.get_player_events", side_effect=RuntimeError("offline")),
+    ):
+        result = sync_service.sync_player(player, season)
+
+    assert result["players_synced"] == 1
+    assert result["entries_upserted"] == 1
+    assert result["errors"] == [{
+        "player": "Player",
+        "source": "parry.gg",
+        "error": "offline",
+    }]
+
+
+def test_cross_source_copy_of_same_tournament_does_not_duplicate_points(
+    db, make_season, make_player, make_team
+):
+    season = make_season()
+    season.sync_from = date(2026, 7, 1)
+    season.sync_to = date(2026, 7, 31)
+    player = make_player("Player", "user/player")
+    player.parrygg_id = "019585f3-1ccf-7c90-bff6-7fdd9a2e5178"
+    make_team(season, players=[player])
+    db.session.commit()
+    start_event = {**_event(1_784_442_600), "seed": 10, "placement": 4}
+    parry_event = {
+        **start_event,
+        "source": "parrygg",
+        "event_id": "parry-event",
+        "tournament_id": "parry-tournament",
+        "tournament_slug": "late-local",
+    }
+
+    with (
+        patch("api.sync.startgg.get_player_events", return_value=[start_event]),
+        patch("api.sync.parrygg.get_player_events", return_value=[parry_event]),
+    ):
+        result = sync_service.sync_player(player, season)
+
+    assert result["entries_upserted"] == 2
+    assert len(season.tournaments) == 1
+    assert len(season.tournaments[0].entries) == 1
+    assert season.tournaments[0].startgg_event_id == "event-1"
+    assert season.tournaments[0].parrygg_event_id == "parry-event"
 
 
 def test_sync_service_rejects_outsider(make_season, make_player):

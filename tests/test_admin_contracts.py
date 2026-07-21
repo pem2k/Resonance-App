@@ -1,3 +1,5 @@
+import pytest
+
 from api.models import Player, Team, TournamentEntry
 
 
@@ -121,6 +123,36 @@ def test_player_update_can_rename_and_clear_slug(admin_client, make_player):
     assert response.status_code == 200
     assert response.get_json()["display_name"] == "New Name"
     assert response.get_json()["startgg_slug"] is None
+
+
+def test_player_accepts_parry_profile_url_and_rejects_duplicate_identity(admin_client):
+    profile_id = "019585f3-1ccf-7c90-bff6-7fdd9a2e5178"
+    created = admin_client.post(
+        "/api/admin/players",
+        json={
+            "display_name": "Parry Player",
+            "parrygg_id": f"https://parry.gg/profile/{profile_id}",
+        },
+    )
+    duplicate = admin_client.post(
+        "/api/admin/players",
+        json={"display_name": "Duplicate", "parrygg_id": profile_id.upper()},
+    )
+
+    assert created.status_code == 201
+    assert created.get_json()["parrygg_id"] == profile_id
+    assert duplicate.status_code == 409
+
+
+@pytest.mark.parametrize("value", ["not-a-uuid", "https://example.com/profile/abc"])
+def test_player_rejects_invalid_parry_profile_id(admin_client, value):
+    response = admin_client.post(
+        "/api/admin/players",
+        json={"display_name": "Player", "parrygg_id": value},
+    )
+
+    assert response.status_code == 400
+    assert "Parry.gg" in response.get_json()["error"]
 
 
 def test_player_can_be_renamed_while_legacy_duplicate_slug_is_unchanged(

@@ -1,9 +1,9 @@
 """
 Season sync logic.
 
-For each rostered player with a startgg_slug, fetches their Melee singles
-results within the season's sync window, auto-creates tournament records,
-and upserts TournamentEntry rows with SPR + points computed.
+For each rostered player with a start.gg slug or Parry.gg profile ID, fetches
+their Melee singles results within the season's sync window, auto-creates
+tournament records, and upserts TournamentEntry rows with SPR + points computed.
 """
 
 from datetime import datetime, timedelta, timezone
@@ -15,12 +15,13 @@ _LEAGUE_TZ = ZoneInfo("America/Los_Angeles")
 
 from api.extensions import db
 from api.models import Player, Tournament, TournamentEntry
-from api import startgg
+from api import parrygg, startgg
+from sqlalchemy import func
 
 
 def sync_season(season) -> dict:
     """
-    Sync all rostered players in a season who have a startgg_slug.
+    Sync all rostered players with at least one configured tournament source.
 
     Tournaments are auto-created from player event data — no manual slug entry needed.
     Already-synced entries are updated in place (idempotent).
@@ -36,7 +37,7 @@ def sync_season(season) -> dict:
     after_ts, before_ts = _sync_window(season)
 
     players = _rostered_players(season)
-    syncable = [p for p in players if p.startgg_slug]
+    syncable = [p for p in players if has_sync_identity(p)]
 
     result = {
         "players_synced": 0,
@@ -49,12 +50,15 @@ def sync_season(season) -> dict:
 
     for player in syncable:
         try:
-            created, upserted, pending = _sync_player(player, season, after_ts, before_ts)
+            created, upserted, pending, source_errors, source_succeeded = _sync_player(
+                player, season, after_ts, before_ts
+            )
             db.session.commit()
-            result["players_synced"] += 1
+            result["players_synced"] += int(source_succeeded)
             result["tournaments_created"] += created
             result["entries_upserted"] += upserted
             result["entries_pending"] += pending
+            result["errors"].extend(source_errors)
         except Exception as exc:
             db.session.rollback()
             result["errors"].append({
@@ -74,25 +78,27 @@ def sync_player(player: Player, season) -> dict:
         raise ValueError("Season sync_from and sync_to must be set.")
     if player.id not in {rostered.id for rostered in _rostered_players(season)}:
         raise ValueError("Player is not rostered in this season.")
-    if not player.startgg_slug or not player.startgg_slug.strip():
-        raise ValueError("Player must have a start.gg slug before syncing.")
+    if not has_sync_identity(player):
+        raise ValueError("Player must have a start.gg slug or Parry.gg profile ID before syncing.")
 
     after_ts, before_ts = _sync_window(season)
 
-    created, upserted, pending = _sync_player(player, season, after_ts, before_ts)
+    created, upserted, pending, source_errors, source_succeeded = _sync_player(
+        player, season, after_ts, before_ts
+    )
     db.session.commit()
     auto_removed, stranded = _deduplicate_tournaments(season)
     return {
         # Keep the background-job result contract identical to a season sync
         # so the shared admin result view can render either operation safely.
-        "players_synced": 1,
+        "players_synced": int(source_succeeded),
         "players_skipped": 0,
         "tournaments_created": created,
         "entries_upserted": upserted,
         "entries_pending": pending,
         "tournaments_auto_removed": auto_removed,
         "entries_stranded_by_dedup": stranded,
-        "errors": [],
+        "errors": source_errors,
     }
 
 
@@ -111,17 +117,49 @@ def _rostered_players(season) -> list[Player]:
     return players
 
 
+def has_sync_identity(player: Player) -> bool:
+    return bool(
+        (player.startgg_slug and player.startgg_slug.strip())
+        or (player.parrygg_id and player.parrygg_id.strip())
+    )
+
+
 def _sync_player(
     player: Player,
     season,
     after_ts: int,
     before_ts: int,
-) -> tuple[int, int, int]:
+) -> tuple[int, int, int, list[dict], bool]:
     """
-    Fetch this player's events from start.gg and upsert entries.
-    Returns (tournaments_created, entries_upserted, pending_results).
+    Fetch this player's configured sources independently and upsert entries.
+
+    A temporary failure in one provider does not discard valid results from
+    the other. Database failures still bubble up and roll back the player.
     """
-    events = startgg.get_player_events(player.startgg_slug, after_ts, before_ts)
+    sources = []
+    if player.startgg_slug and player.startgg_slug.strip():
+        sources.append(("start.gg", startgg.get_player_events, player.startgg_slug))
+    if player.parrygg_id and player.parrygg_id.strip():
+        sources.append(("parry.gg", parrygg.get_player_events, player.parrygg_id))
+
+    events = []
+    source_errors = []
+    source_succeeded = False
+    for source_name, fetch, identifier in sources:
+        try:
+            fetched = fetch(identifier, after_ts, before_ts)
+        except Exception as exc:
+            source_errors.append({
+                "player": player.display_name,
+                "source": source_name,
+                "error": str(exc),
+            })
+            continue
+        source_succeeded = True
+        for event in fetched:
+            normalized = dict(event)
+            normalized.setdefault("source", "parrygg" if source_name == "parry.gg" else "startgg")
+            events.append(normalized)
 
     tournaments_created = 0
     entries_upserted = 0
@@ -156,12 +194,18 @@ def _sync_player(
         tournament.synced_at = datetime.now(timezone.utc).replace(tzinfo=None)
         entries_upserted += 1
 
-    return tournaments_created, entries_upserted, pending_results
+    return (
+        tournaments_created,
+        entries_upserted,
+        pending_results,
+        source_errors,
+        source_succeeded,
+    )
 
 
 def _get_or_create_tournament(ev: dict, season) -> Tournament | None:
     """
-    Look up a tournament by its start.gg event ID; create it if new.
+    Look up a tournament by its provider event ID; create it if new.
     Stamps _created=True on the object when newly created.
     """
     # Scoped to this season: the same start.gg event may legitimately exist
@@ -170,20 +214,42 @@ def _get_or_create_tournament(ev: dict, season) -> Tournament | None:
         ev["tournament_date"], tz=_LEAGUE_TZ
     ).date()
 
-    tournament = Tournament.query.filter_by(
-        startgg_event_id=ev["event_id"],
-        season_id=season.id,
+    source = ev.get("source", "startgg")
+    event_column = (
+        Tournament.parrygg_event_id if source == "parrygg" else Tournament.startgg_event_id
+    )
+    tournament = Tournament.query.filter(
+        event_column == ev["event_id"],
+        Tournament.season_id == season.id,
     ).first()
+
+    if tournament is None:
+        # A tournament may be mirrored between providers. Exact name/date
+        # matching prevents duplicate points while avoiding fuzzy merges.
+        tournament = Tournament.query.filter(
+            Tournament.season_id == season.id,
+            Tournament.date == local_date,
+            func.lower(func.trim(Tournament.name)) == ev["tournament_name"].strip().casefold(),
+        ).first()
 
     if tournament:
         if tournament.removed:
             return None  # excluded from sync
+        cross_source_match = (
+            source == "parrygg" and tournament.startgg_event_id
+        ) or (
+            source == "startgg" and tournament.parrygg_event_id
+        )
+        _link_provider_identifiers(tournament, ev)
         # Repair dates previously derived from UTC and keep upstream changes in sync.
         tournament.date = local_date
         # total_entrants is SPR's validation/clamping boundary, so recompute
         # entries when it changes.
-        if tournament.total_entrants != ev["num_entrants"]:
-            tournament.total_entrants = ev["num_entrants"]
+        incoming_entrants = ev["num_entrants"]
+        if cross_source_match and tournament.total_entrants and incoming_entrants:
+            incoming_entrants = max(tournament.total_entrants, incoming_entrants)
+        if incoming_entrants and tournament.total_entrants != incoming_entrants:
+            tournament.total_entrants = incoming_entrants
             for entry in tournament.entries:
                 entry.compute()
         tournament._created = False
@@ -193,21 +259,30 @@ def _get_or_create_tournament(ev: dict, season) -> Tournament | None:
         name=ev["tournament_name"],
         date=local_date,
         season_id=season.id,
-        startgg_id=ev["tournament_id"],
-        startgg_slug=ev["tournament_slug"],
-        startgg_event_id=ev["event_id"],
         total_entrants=ev["num_entrants"],
     )
+    _link_provider_identifiers(tournament, ev)
     db.session.add(tournament)
     db.session.flush()  # get tournament.id before creating entries
     tournament._created = True
     return tournament
 
 
+def _link_provider_identifiers(tournament: Tournament, ev: dict) -> None:
+    if ev.get("source", "startgg") == "parrygg":
+        tournament.parrygg_id = ev["tournament_id"]
+        tournament.parrygg_slug = ev.get("tournament_slug")
+        tournament.parrygg_event_id = ev["event_id"]
+    else:
+        tournament.startgg_id = ev["tournament_id"]
+        tournament.startgg_slug = ev.get("tournament_slug")
+        tournament.startgg_event_id = ev["event_id"]
+
+
 def _deduplicate_tournaments(season) -> tuple[int, list[dict]]:
     """
-    For each startgg_id that appears in more than one active tournament in this
-    season, keep the one with the most entrants and soft-remove the rest.
+    For each provider tournament ID that appears in more than one active row in
+    this season, keep the one with the most entrants and soft-remove the rest.
 
     Returns (tournaments_removed, stranded_entries) where stranded_entries
     lists players whose entry lived only on a removed duplicate bracket (so
@@ -215,10 +290,12 @@ def _deduplicate_tournaments(season) -> tuple[int, list[dict]]:
     """
     active = Tournament.query.filter_by(season_id=season.id, removed=False).all()
 
-    groups: dict[str, list] = {}
+    groups: dict[tuple[str, str], list] = {}
     for t in active:
         if t.startgg_id:
-            groups.setdefault(t.startgg_id, []).append(t)
+            groups.setdefault(("startgg", t.startgg_id), []).append(t)
+        if t.parrygg_id:
+            groups.setdefault(("parrygg", t.parrygg_id), []).append(t)
 
     count = 0
     stranded = []
@@ -229,6 +306,8 @@ def _deduplicate_tournaments(season) -> tuple[int, list[dict]]:
         kept = group[0]
         kept_player_ids = {e.player_id for e in kept.entries}
         for t in group[1:]:
+            if t.removed:
+                continue
             t.removed = True
             count += 1
             for e in t.entries:
@@ -254,7 +333,7 @@ def _sync_window(season) -> tuple[int, int]:
     """
     after_ts = _start_of_day(season.sync_from)
     # End of sync_to = start of the following day (exclusive bound, but the
-    # comparison in startgg.get_player_events uses `>`, so subtract 1s).
+    # provider comparisons use `>`, so subtract 1s).
     before_ts = _start_of_day(season.sync_to + timedelta(days=1)) - 1
     return after_ts, before_ts
 

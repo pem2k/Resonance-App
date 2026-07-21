@@ -160,6 +160,53 @@ def create_app(config=None):
             f"skipped {skipped}; net point change {net_point_change:+d}."
         )
 
+    @app.cli.command("migrate-parrygg")
+    @click.option(
+        "--dry-run",
+        is_flag=True,
+        help="Report missing Parry.gg columns without changing the database.",
+    )
+    def migrate_parrygg(dry_run):
+        """Add nullable Parry.gg identity columns to an existing database."""
+        from sqlalchemy import inspect
+
+        required = {
+            "players": {"parrygg_id": "VARCHAR(50)"},
+            "tournaments": {
+                "parrygg_id": "VARCHAR(50)",
+                "parrygg_slug": "VARCHAR(200)",
+                "parrygg_event_id": "VARCHAR(50)",
+            },
+        }
+        inspector = inspect(db.engine)
+        missing = []
+        for table, definitions in required.items():
+            present = {column["name"] for column in inspector.get_columns(table)}
+            missing.extend(
+                (table, column, sql_type)
+                for column, sql_type in definitions.items()
+                if column not in present
+            )
+
+        if not missing:
+            click.echo("Parry.gg columns are already present.")
+            return
+        if dry_run:
+            for table, column, _sql_type in missing:
+                click.echo(f"Would add {table}.{column}")
+            return
+
+        try:
+            for table, column, sql_type in missing:
+                db.session.execute(db.text(
+                    f'ALTER TABLE "{table}" ADD COLUMN "{column}" {sql_type}'
+                ))
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            raise
+        click.echo(f"Added {len(missing)} Parry.gg columns.")
+
     # ── Serve React (catch-all — must be registered after API blueprints) ────
     @app.route("/", defaults={"path": ""})
     @app.route("/<path:path>")

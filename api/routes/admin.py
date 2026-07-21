@@ -1,5 +1,7 @@
 from datetime import date
 import re
+from urllib.parse import urlparse
+from uuid import UUID
 from flask import Blueprint, jsonify, request
 from api.extensions import db
 from api.models import Season, Team, Player, Tournament, TournamentEntry
@@ -54,6 +56,25 @@ def _optional_string(data, key):
     if not isinstance(value, str):
         raise AdminAPIError(f"{key.replace('_', ' ').title()} must be a string or null.")
     return value.strip() or None
+
+
+def _parrygg_id(data, key="parrygg_id"):
+    value = _optional_string(data, key)
+    if value is None:
+        return None
+
+    candidate = value
+    if "://" in value:
+        parsed = urlparse(value)
+        parts = [part for part in parsed.path.split("/") if part]
+        if parsed.hostname not in {"parry.gg", "www.parry.gg"} or len(parts) != 2 or parts[0] != "profile":
+            raise AdminAPIError("Parry.gg profile must be a profile URL or UUID.")
+        candidate = parts[1]
+
+    try:
+        return str(UUID(candidate))
+    except (ValueError, AttributeError) as exc:
+        raise AdminAPIError("Parry.gg profile must be a profile URL or UUID.") from exc
 
 
 def _required_id(data, key):
@@ -148,11 +169,13 @@ def create_player():
     display_name = _required_string(data, "display_name", "Display name")
     startgg_id = _optional_string(data, "startgg_id")
     startgg_slug = _optional_string(data, "startgg_slug")
+    parrygg_id = _parrygg_id(data)
     existing = _player_identity_conflict(
         display_name=display_name,
         startgg_id=startgg_id,
         startgg_slug=startgg_slug,
-        check_name=not startgg_id and not startgg_slug,
+        parrygg_id=parrygg_id,
+        check_name=not startgg_id and not startgg_slug and not parrygg_id,
     )
     if existing:
         raise AdminAPIError(
@@ -164,6 +187,7 @@ def create_player():
         display_name=display_name,
         startgg_id=startgg_id,
         startgg_slug=startgg_slug,
+        parrygg_id=parrygg_id,
     )
     db.session.add(player)
     db.session.commit()
@@ -177,30 +201,36 @@ def update_player(player_id):
     display_name = player.display_name
     startgg_id = player.startgg_id
     startgg_slug = player.startgg_slug
+    parrygg_id = player.parrygg_id
     if "display_name" in data:
         display_name = _required_string(data, "display_name", "Display name")
     if "startgg_id" in data:
         startgg_id = _optional_string(data, "startgg_id")
     if "startgg_slug" in data:
         startgg_slug = _optional_string(data, "startgg_slug")
+    if "parrygg_id" in data:
+        parrygg_id = _parrygg_id(data)
     id_changed = "startgg_id" in data and startgg_id != player.startgg_id
     old_slug = player.startgg_slug.casefold() if player.startgg_slug else None
     new_slug = startgg_slug.casefold() if startgg_slug else None
     slug_changed = "startgg_slug" in data and new_slug != old_slug
+    parry_id_changed = "parrygg_id" in data and parrygg_id != player.parrygg_id
     existing = _player_identity_conflict(
         startgg_id=startgg_id if id_changed else None,
         startgg_slug=startgg_slug if slug_changed else None,
+        parrygg_id=parrygg_id if parry_id_changed else None,
         exclude_player_id=player.id,
     )
     if existing:
         raise AdminAPIError(
-            "A player with that start.gg identity already exists.",
+            "A player with that tournament-platform identity already exists.",
             409,
             existing_player=existing.to_dict(),
         )
     player.display_name = display_name
     player.startgg_id = startgg_id
     player.startgg_slug = startgg_slug
+    player.parrygg_id = parrygg_id
     db.session.commit()
     return jsonify(player.to_dict())
 
@@ -689,6 +719,7 @@ def _player_identity_conflict(
     display_name=None,
     startgg_id=None,
     startgg_slug=None,
+    parrygg_id=None,
     exclude_player_id=None,
     check_name=False,
 ):
@@ -698,6 +729,10 @@ def _player_identity_conflict(
     if startgg_slug:
         queries.append(Player.query.filter(
             func.lower(func.trim(Player.startgg_slug)) == startgg_slug.casefold()
+        ))
+    if parrygg_id:
+        queries.append(Player.query.filter(
+            func.lower(func.trim(Player.parrygg_id)) == parrygg_id.casefold()
         ))
     if check_name and display_name:
         queries.append(_normalized_name_query(Player, Player.display_name, display_name))

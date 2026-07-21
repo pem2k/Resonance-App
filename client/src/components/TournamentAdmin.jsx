@@ -2,6 +2,19 @@ import { useState, useEffect } from 'react'
 import { requestJson } from '../api'
 import styles from './TournamentAdmin.module.css'
 
+function tournamentUrl(tournament) {
+  if (tournament.startgg_slug) return `https://www.start.gg/${tournament.startgg_slug}`
+  if (tournament.parrygg_slug) return `https://parry.gg/${tournament.parrygg_slug}`
+  return null
+}
+
+function TournamentName({ tournament }) {
+  const url = tournamentUrl(tournament)
+  return url
+    ? <a href={url} target="_blank" rel="noreferrer">{tournament.name}</a>
+    : tournament.name
+}
+
 export default function TournamentAdmin({ seasonId }) {
   const [tournaments, setTournaments] = useState([])
   const [removed, setRemoved] = useState([])
@@ -94,10 +107,7 @@ export default function TournamentAdmin({ seasonId }) {
                     .map(t => (
                       <tr key={t.id}>
                         <td className={styles.name}>
-                          {t.startgg_slug
-                            ? <a href={`https://www.start.gg/${t.startgg_slug}`} target="_blank" rel="noreferrer">{t.name}</a>
-                            : t.name
-                          }
+                          <TournamentName tournament={t} />
                         </td>
                         <td className={`${styles.secondary} ${styles.center}`}>{t.date ?? '—'}</td>
                         <td className={`${styles.secondary} ${styles.center}`}>{t.total_entrants ?? '—'}</td>
@@ -141,10 +151,7 @@ export default function TournamentAdmin({ seasonId }) {
                       .map(t => (
                         <tr key={t.id}>
                           <td className={`${styles.name} ${styles.removedName}`}>
-                            {t.startgg_slug
-                              ? <a href={`https://www.start.gg/${t.startgg_slug}`} target="_blank" rel="noreferrer">{t.name}</a>
-                              : t.name
-                            }
+                            <TournamentName tournament={t} />
                           </td>
                           <td className={`${styles.secondary} ${styles.center}`}>{t.date ?? '—'}</td>
                           <td className={`${styles.secondary} ${styles.center}`}>{t.total_entrants ?? '—'}</td>

@@ -14,7 +14,7 @@ A WWA (Pacific Northwest) Smash Bros. Melee crew league web dashboard. 8 teams o
 |---|---|
 | Backend | Flask + SQLAlchemy + SQLite, Python 3.12 |
 | Frontend | React 18 + Vite, CSS Modules |
-| Data source | start.gg GraphQL API (player-centric sync) |
+| Data sources | start.gg GraphQL API and Parry.gg JSON-over-HTTP API (player-centric sync) |
 
 **Backend entry point:** `run.py` → `api/` (Flask factory pattern)
 **Frontend:** `client/` (Vite dev server on :5173, proxies `/api` to :5000)
@@ -44,9 +44,10 @@ APP_ENV=development
 CORS_ORIGINS=http://localhost:5173
 DATABASE_URL=sqlite:///resonance.db
 STARTGG_API_KEY=<start.gg bearer token>
+PARRYGG_API_KEY=<parry.gg API key>
 ```
 
-The `.env` is gitignored. You need to recreate it on a new machine. Get a start.gg API key at start.gg → Admin → Developer.
+The `.env` is gitignored. You need to recreate it on a new machine. Get a start.gg API key at start.gg → Admin → Developer and a Parry.gg API key from the Developer section of your Parry.gg profile.
 
 ---
 
@@ -100,16 +101,17 @@ seed or placement values.
 
 ```
 Season       id, name, start_date, end_date, status, sync_from, sync_to
-Player       id, display_name, startgg_slug  (global — reused across seasons)
+Player       id, display_name, startgg_slug, parrygg_id  (global — reused across seasons)
 Team         id, name, season_id, captain_id → Player
 team_roster  team_id, player_id  (join table)
 Tournament   id, name, date, season_id, startgg_id, startgg_slug,
-             startgg_event_id, total_entrants, synced_at
+             startgg_event_id, parrygg_id, parrygg_slug, parrygg_event_id,
+             total_entrants, synced_at
 TournamentEntry  id, player_id, tournament_id, seed, placement, spr, points
 AdminUser    id, username, password_hash
 ```
 
-`db.create_all()` is used — no migrations. If you add columns to existing tables, delete `instance/resonance.db` and restart to recreate.
+`db.create_all()` is used for fresh databases. Existing databases can add the nullable Parry.gg columns safely with `flask --app api migrate-parrygg`; no database reset is required.
 
 ---
 
@@ -123,6 +125,7 @@ api/
   utils.py             calculate_spr(), spr_to_points()
   sync.py              sync_season(), sync_player() — per-player commit
   startgg.py           GraphQL client, two-phase query (events then entrants)
+  parrygg.py           JSON-over-HTTP client (placements, events, tournaments)
   models/
     season.py
     player.py
@@ -154,15 +157,17 @@ client/src/
 
 ---
 
-## start.gg Sync — How It Works
+## Tournament Sync — How It Works
 
-Player-centric sync: we store each player's `startgg_slug` (e.g. `user/abc123`) and query their event history.
+Player-centric sync: each player can have a `startgg_slug`, a `parrygg_id`, or both. Configured providers are queried independently so a temporary error from one provider does not discard valid results from the other.
 
 **Two-phase query to avoid GraphQL complexity limits:**
 1. `GET_USER_EVENTS_QUERY` — get list of events the user attended (Melee only, no entrant data). Also fetches `user.player.id`.
 2. `GET_EVENT_ENTRANTS_QUERY` — for each event in the sync window, paginate through entrants (64/page) and find the matching one by player ID.
 
 Filters applied in Python (not GQL): singles only (`type == 1`), date window.
+
+Parry.gg uses its documented JSON-over-HTTP proxy. `GetUserPlacements` is paginated, then `GetEvent` filters to Melee singles and `GetTournament` supplies the tournament name, date, and public slug. Exact same-name/same-date copies from both providers are merged so they cannot award duplicate points.
 
 Rate limiting: 0.6s sleep between every API call, exponential backoff (4s/8s/16s) on 429s.
 
@@ -175,7 +180,7 @@ SQLite WAL mode is enabled so status-poll reads don't block the long sync write.
 - **start.gg filter fields that DON'T exist:** `type`, `afterDate`, `beforeDate` on `UserEventsPaginationFilter`; `isCurrentUser` and `playerIds` on `EventEntrantPageQueryFilter`. None of these work — filter in Python instead.
 - **SQLite locked during sync:** Fixed with WAL mode (`PRAGMA journal_mode=WAL`), `busy_timeout=10000`, and per-player commits.
 - **`display: flex` on `<td>`** breaks table column alignment — `.actions` td must use `text-align: right` only.
-- **DB schema changes:** `db.create_all()` does not migrate existing tables. Delete `instance/resonance.db` to reset.
+- **DB schema changes:** `db.create_all()` does not migrate existing tables. Use the explicit schema command documented above; do not delete a populated database.
 - **Port 5000 conflict:** `fuser -k 5000/tcp` to kill stale Flask process.
 - **Vite proxy:** must point to `127.0.0.1:5000` not `localhost:5000`.
 

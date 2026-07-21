@@ -24,6 +24,7 @@ erDiagram
         string display_name
         string startgg_id
         string startgg_slug
+        string parrygg_id
     }
 
     team_roster {
@@ -39,6 +40,9 @@ erDiagram
         string startgg_id
         string startgg_slug
         string startgg_event_id
+        string parrygg_id
+        string parrygg_slug
+        string parrygg_event_id
         int total_entrants
         datetime synced_at
     }
@@ -112,11 +116,18 @@ sequenceDiagram
     participant Admin
     participant API
     participant startgg as start.gg GraphQL
+    participant parrygg as Parry.gg JSON API
 
     Admin->>API: POST /api/admin/sync/season/:id
-    loop For each rostered player with startgg_slug
-        API->>startgg: get_player_events(slug, after, before)
-        startgg-->>API: Melee singles events in date window
+    loop For each rostered player with either provider identity
+        opt start.gg slug configured
+            API->>startgg: get_player_events(slug, after, before)
+            startgg-->>API: Melee singles events in date window
+        end
+        opt Parry.gg profile configured
+            API->>parrygg: get_player_events(profile_id, after, before)
+            parrygg-->>API: Melee singles placements and events
+        end
         loop For each event
             API->>API: get_or_create Tournament
             API->>API: upsert TournamentEntry
@@ -152,6 +163,7 @@ graph TD
     dec["decorators.py\n(require_admin hook)"]
     utils["utils.py\n(calculate_spr, spr_to_points)"]
     sg["startgg.py\n(GraphQL client)"]
+    pg["parrygg.py\n(JSON API client)"]
     sync_logic["sync.py\n(season/player sync logic)"]
     models["models/"]
     routes["routes/"]
@@ -165,7 +177,7 @@ graph TD
 
     r_public["public.py\n(read-only)"]
     r_admin["admin.py\n(CRUD)"]
-    r_sync["sync.py\n(start.gg sync)"]
+    r_sync["sync.py\n(multi-provider sync)"]
     r_auth["auth.py\n(login/logout/me)"]
 
     client["client/"]
@@ -188,6 +200,7 @@ graph TD
     api --> dec
     api --> utils
     api --> sg
+    api --> pg
     api --> sync_logic
     api --> models
     api --> routes

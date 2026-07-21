@@ -113,7 +113,7 @@ function CreateTeamForm({ seasonId, onCreated, onError }) {
 function TeamCard({ team, allPlayers, onUpdate, setMsg, setError }) {
   const [addMode, setAddMode] = useState(null)
   const [selectedPlayerId, setSelectedPlayerId] = useState('')
-  const [newPlayer, setNewPlayer] = useState({ display_name: '', startgg_slug: '' })
+  const [newPlayer, setNewPlayer] = useState({ display_name: '', startgg_slug: '', parrygg_id: '' })
   const [playerEdits, setPlayerEdits] = useState({})
   const [renaming, setRenaming] = useState(false)
   const [teamName, setTeamName] = useState(team.name)
@@ -130,6 +130,7 @@ function TeamCard({ team, allPlayers, onUpdate, setMsg, setError }) {
       [player.id]: {
         display_name: edits[player.id]?.display_name ?? player.display_name,
         startgg_slug: edits[player.id]?.startgg_slug ?? player.startgg_slug ?? '',
+        parrygg_id: edits[player.id]?.parrygg_id ?? player.parrygg_id ?? '',
         [key]: value,
       },
     }))
@@ -178,7 +179,7 @@ function TeamCard({ team, allPlayers, onUpdate, setMsg, setError }) {
       })
       try {
         await attachPlayer(player.id, player.display_name)
-        setNewPlayer({ display_name: '', startgg_slug: '' })
+        setNewPlayer({ display_name: '', startgg_slug: '', parrygg_id: '' })
       } catch (err) {
         await onUpdate()
         throw new Error(`${player.display_name} was created, but could not be added to ${team.name}: ${err.message}`)
@@ -340,7 +341,7 @@ function TeamCard({ team, allPlayers, onUpdate, setMsg, setError }) {
 
       <div className={styles.tableWrap}>
         <table className={styles.table}>
-          <thead><tr><th>Global display name</th><th>start.gg slug</th><th><span className={styles.srOnly}>Actions</span></th></tr></thead>
+          <thead><tr><th>Global display name</th><th>start.gg slug</th><th>Parry.gg profile</th><th><span className={styles.srOnly}>Actions</span></th></tr></thead>
           <tbody>
             {(team.roster ?? []).map(player => {
               const edits = playerEdits[player.id]
@@ -364,6 +365,15 @@ function TeamCard({ team, allPlayers, onUpdate, setMsg, setError }) {
                       aria-label={`start.gg slug for ${player.display_name}`}
                     />
                   </td>
+                  <td>
+                    <input
+                      className={styles.slugInput}
+                      value={edits?.parrygg_id ?? player.parrygg_id ?? ''}
+                      onChange={e => editPlayer(player, 'parrygg_id', e.target.value)}
+                      placeholder="Profile URL or UUID"
+                      aria-label={`Parry.gg profile for ${player.display_name}`}
+                    />
+                  </td>
                   <td className={styles.actions}>
                     {edits && <button className={styles.saveSmall} onClick={() => savePlayer(player)} disabled={busy}>Save</button>}
                     {team.captain?.id !== player.id
@@ -384,7 +394,11 @@ function TeamCard({ team, allPlayers, onUpdate, setMsg, setError }) {
           <select value={selectedPlayerId} onChange={e => setSelectedPlayerId(e.target.value)} aria-label={`Existing player for ${team.name}`} required>
             <option value="">Choose an existing global player…</option>
             {attachablePlayers.map(player => (
-              <option key={player.id} value={player.id}>{player.display_name}{player.startgg_slug ? ` — ${player.startgg_slug}` : ''}</option>
+              <option key={player.id} value={player.id}>
+                {player.display_name}
+                {player.startgg_slug ? ` — ${player.startgg_slug}` : ''}
+                {player.parrygg_id ? ' — Parry.gg linked' : ''}
+              </option>
             ))}
           </select>
           <button className={styles.saveBtn} type="submit" disabled={busy || !selectedPlayerId}>{busy ? 'Adding…' : 'Add existing'}</button>
@@ -396,6 +410,7 @@ function TeamCard({ team, allPlayers, onUpdate, setMsg, setError }) {
         <form className={styles.inlineForm} onSubmit={createPlayer}>
           <input value={newPlayer.display_name} onChange={e => setNewPlayer(player => ({ ...player, display_name: e.target.value }))} placeholder="New display name" aria-label={`New player name for ${team.name}`} required />
           <input value={newPlayer.startgg_slug} onChange={e => setNewPlayer(player => ({ ...player, startgg_slug: e.target.value }))} placeholder="start.gg slug (optional)" aria-label={`New player start.gg slug for ${team.name}`} />
+          <input value={newPlayer.parrygg_id} onChange={e => setNewPlayer(player => ({ ...player, parrygg_id: e.target.value }))} placeholder="Parry.gg profile URL or UUID (optional)" aria-label={`New player Parry.gg profile for ${team.name}`} />
           <button className={styles.saveBtn} type="submit" disabled={busy}>{busy ? 'Creating…' : 'Create & add'}</button>
           <button className={styles.cancelBtn} type="button" disabled={busy} onClick={() => setAddMode(null)}>Cancel</button>
         </form>

@@ -62,7 +62,8 @@ def _job_payload(season_id: int) -> dict:
 def sync_season(season_id):
     """
     Start a background sync of all rostered players in a season who have a
-    startgg_slug. Returns 202 immediately; poll GET /season/<id>/job for progress.
+    start.gg slug or Parry.gg profile ID. Returns 202 immediately; poll the
+    job endpoint for progress.
     """
     season = db.get_or_404(Season, season_id)
     if not season.sync_from or not season.sync_to:
@@ -89,8 +90,10 @@ def sync_player(season_id, player_id):
     }
     if player.id not in rostered_ids:
         return jsonify({"error": "Player is not rostered in this season."}), 400
-    if not player.startgg_slug or not player.startgg_slug.strip():
-        return jsonify({"error": "Player must have a start.gg slug before syncing."}), 400
+    if not sync_service.has_sync_identity(player):
+        return jsonify({
+            "error": "Player must have a start.gg slug or Parry.gg profile ID before syncing."
+        }), 400
 
     def task(sid, pid):
         s = db.session.get(Season, sid)
@@ -135,7 +138,9 @@ def sync_status(season_id):
                 "id": player.id,
                 "display_name": player.display_name,
                 "startgg_slug": player.startgg_slug,
+                "parrygg_id": player.parrygg_id,
                 "has_slug": bool(player.startgg_slug and player.startgg_slug.strip()),
+                "has_source": sync_service.has_sync_identity(player),
                 "entries_this_season": entry_count,
             })
 

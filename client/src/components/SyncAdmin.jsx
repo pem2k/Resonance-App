@@ -57,8 +57,8 @@ export default function SyncAdmin({ activeSeason, onSyncStart, onSyncEnd }) {
 
   if (!activeSeason) return <p className={styles.empty}>No season selected.</p>
 
-  const missingSlug = status?.players?.filter(p => !p.has_slug) ?? []
-  const ready = status?.players?.filter(p => p.has_slug) ?? []
+  const missingSlug = status?.players?.filter(p => !(p.has_source ?? p.has_slug)) ?? []
+  const ready = status?.players?.filter(p => p.has_source ?? p.has_slug) ?? []
 
   return (
     <div className={styles.root}>
@@ -79,7 +79,7 @@ export default function SyncAdmin({ activeSeason, onSyncStart, onSyncEnd }) {
       <div className={styles.card}>
         <p className={styles.cardTitle}>Run sync</p>
         <p className={styles.hint}>
-          Pulls each rostered player's Melee singles results from start.gg within the sync window.
+          Pulls each rostered player's Melee singles results from start.gg and Parry.gg within the sync window.
           Tournaments are created automatically. Already-synced entries are updated in place.
         </p>
         <button className={styles.syncBtn} onClick={runSync} disabled={syncing || !status?.sync_from}>
@@ -87,7 +87,7 @@ export default function SyncAdmin({ activeSeason, onSyncStart, onSyncEnd }) {
         </button>
 
         {syncing && (
-          <p className={styles.hint}>Fetching results from start.gg — this can take a minute or two.</p>
+          <p className={styles.hint}>Fetching results from start.gg and Parry.gg — this can take a minute or two.</p>
         )}
 
         {result && (
@@ -98,10 +98,10 @@ export default function SyncAdmin({ activeSeason, onSyncStart, onSyncEnd }) {
                 <p>✓ Tournaments created: <strong>{result.tournaments_created}</strong></p>
                 <p>✓ Entries upserted: <strong>{result.entries_upserted}</strong></p>
                 {result.tournaments_auto_removed > 0 && <p>✓ Duplicate brackets auto-removed: <strong>{result.tournaments_auto_removed}</strong></p>}
-                {result.players_skipped > 0 && <p className={styles.warn}>⚠ Players skipped (no slug): {result.players_skipped}</p>}
+                {result.players_skipped > 0 && <p className={styles.warn}>⚠ Players skipped (no tournament profile): {result.players_skipped}</p>}
                 {result.entries_pending > 0 && <p className={styles.warn}>⚠ Events with no finalized results yet: {result.entries_pending}</p>}
                 {result.errors?.map((e, i) => (
-                  <p key={i} className={styles.error}>✗ {e.player}: {e.error}</p>
+                  <p key={i} className={styles.error}>✗ {e.player}{e.source ? ` (${e.source})` : ''}: {e.error}</p>
                 ))}
               </div>
         )}
@@ -112,19 +112,22 @@ export default function SyncAdmin({ activeSeason, onSyncStart, onSyncEnd }) {
         <p className={styles.cardTitle}>Player coverage</p>
         {missingSlug.length > 0 && (
           <div className={styles.warnBox}>
-            <p className={styles.warn}>Missing start.gg slug — won't be synced:</p>
+            <p className={styles.warn}>Missing start.gg slug and Parry.gg profile — won't be synced:</p>
             {missingSlug.map(p => <p key={p.id} className={styles.muted}>· {p.display_name}</p>)}
           </div>
         )}
         <div className={styles.tableWrap}>
           <table className={styles.table}>
             <thead>
-              <tr><th>Player</th><th className={styles.center}>Entries this season</th><th><span className={styles.srOnly}>Actions</span></th></tr>
+              <tr><th>Player</th><th>Sources</th><th className={styles.center}>Entries this season</th><th><span className={styles.srOnly}>Actions</span></th></tr>
             </thead>
             <tbody>
               {ready.map(p => (
                 <tr key={p.id}>
                   <td>{p.display_name}</td>
+                  <td className={styles.muted}>
+                    {[p.startgg_slug && 'start.gg', p.parrygg_id && 'Parry.gg'].filter(Boolean).join(' + ')}
+                  </td>
                   <td className={styles.center}>{p.entries_this_season}</td>
                   <td className={styles.actions}>
                     <button className={styles.mutedBtn} onClick={() => syncPlayer(p.id)} disabled={syncing}>Re-sync</button>
