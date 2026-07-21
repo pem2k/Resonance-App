@@ -1,10 +1,9 @@
 import styles from './Leaderboard.module.css'
+import { formatPointsPerEvent } from './leaderboardFormatting.mjs'
 
-function SPRBadge({ value }) {
-  if (value == null) return <span className={styles.muted}>—</span>
-  const sign = value > 0 ? '+' : ''
-  const cls = value > 0 ? styles.sprPositive : value < 0 ? styles.sprNegative : styles.sprNeutral
-  return <span className={cls}>{sign}{value.toFixed(1)}</span>
+function AveragePoints({ value }) {
+  const className = value == null ? styles.muted : styles.averagePoints
+  return <span className={className}>{formatPointsPerEvent(value)}</span>
 }
 
 function RankCell({ rank }) {
@@ -94,7 +93,7 @@ export default function Leaderboard({ season, seasons, onSeasonChange, standings
                   <th>Player</th>
                   <th>Team</th>
                   <th className={styles.center}>Events</th>
-                  <th className={styles.center}>Pts/Event</th>
+                  <th className={styles.center} title="Average points per event">Avg Points</th>
                   <th className={styles.center}>Points</th>
                 </tr>
               </thead>
@@ -108,7 +107,7 @@ export default function Leaderboard({ season, seasons, onSeasonChange, standings
                       {player.events_attended}
                     </td>
                     <td className={styles.center}>
-                      <SPRBadge value={player.points_per_event} />
+                      <AveragePoints value={player.points_per_event} />
                     </td>
                     <td className={`${styles.points} ${styles.center}`}>
                       {player.total_points}

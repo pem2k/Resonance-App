@@ -155,10 +155,11 @@
 .silver { font-weight: 700; color: #b5bac1; }
 .bronze { font-weight: 700; color: #cd7f32; }
 
-/* SPR / Pts per event */
-.sprPositive { color: var(--green); font-weight: 600; }
-.sprNegative { color: var(--red);   font-weight: 600; }
-.sprNeutral  { color: var(--text-secondary); }
+/* Average league points per event; intentionally neutral so it cannot be read as SPR. */
+.averagePoints {
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
 
 /* ── Responsive ────────────────────────────────────────────────── */
 
