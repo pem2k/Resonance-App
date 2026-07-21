@@ -60,7 +60,15 @@ def create_app(config=None):
     limiter.init_app(app)
 
     # ── Blueprints ────────────────────────────────────────────────────────────
-    from api.models import Season, Team, Player, Tournament, TournamentEntry, AdminUser  # noqa: F401
+    from api.models import (  # noqa: F401
+        AdminUser,
+        AutoSyncState,
+        Player,
+        Season,
+        Team,
+        Tournament,
+        TournamentEntry,
+    )
     from api.routes import public, admin, sync_bp, auth
     app.register_blueprint(public)
     app.register_blueprint(admin)
@@ -83,19 +91,34 @@ def create_app(config=None):
 
     # ── CLI commands ──────────────────────────────────────────────────────────
     @app.cli.command("auto-sync")
-    def auto_sync():
-        """Sync all active seasons that have a sync window set. Run via Heroku Scheduler."""
-        from api import sync as sync_service
-        seasons = Season.query.filter_by(status="active").all()
-        synced = 0
-        for s in seasons:
-            if s.sync_from and s.sync_to:
-                click.echo(f"Syncing season: {s.name} …")
-                result = sync_service.sync_season(s)
-                click.echo(f"  done — {result}")
-                synced += 1
-        if not synced:
-            click.echo("No active seasons with a sync window found.")
+    @click.option(
+        "--min-interval-hours",
+        type=click.FloatRange(min=0.25),
+        default=4.0,
+        show_default=True,
+        help="Minimum time between successful runs for each active season.",
+    )
+    @click.option("--force", is_flag=True, help="Ignore the minimum interval.")
+    @click.option(
+        "--dry-run",
+        is_flag=True,
+        help="Report which seasons are due without fetching or writing results.",
+    )
+    def auto_sync(min_interval_hours, force, dry_run):
+        """Sync due active seasons. Intended for an hourly Heroku Scheduler job."""
+        from api.autosync import run_auto_sync
+
+        summary = run_auto_sync(
+            min_interval_hours=min_interval_hours,
+            force=force,
+            dry_run=dry_run,
+        )
+        for message in summary["messages"]:
+            click.echo(message)
+        if summary["failures"]:
+            raise click.ClickException(
+                f"Autosync failed for {len(summary['failures'])} season(s)."
+            )
 
     @app.cli.command("create-admin")
     @click.argument("username")
