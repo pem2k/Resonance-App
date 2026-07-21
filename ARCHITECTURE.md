@@ -126,7 +126,7 @@ sequenceDiagram
         end
         opt Parry.gg profile configured
             API->>parrygg: get_player_events(profile_id, after, before)
-            parrygg-->>API: Melee singles placements and events
+            parrygg-->>API: public Melee singles placements and warnings
         end
         loop For each event
             API->>API: get_or_create Tournament

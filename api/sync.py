@@ -156,6 +156,12 @@ def _sync_player(
             })
             continue
         source_succeeded = True
+        for warning in getattr(fetched, "warnings", []):
+            source_errors.append({
+                "player": player.display_name,
+                "source": source_name,
+                "error": warning,
+            })
         for event in fetched:
             normalized = dict(event)
             normalized.setdefault("source", "parrygg" if source_name == "parry.gg" else "startgg")
@@ -164,35 +170,24 @@ def _sync_player(
     tournaments_created = 0
     entries_upserted = 0
     pending_results = 0
+    processed_results = {}
 
     for ev in events:
-        if ev["placement"] is None or ev["seed"] is None:
-            # Results not finalised yet — skip
-            pending_results += 1
+        try:
+            with db.session.begin_nested():
+                created, upserted, pending = _upsert_event(
+                    ev, player, season, processed_results, source_errors
+                )
+        except Exception as exc:
+            source_errors.append({
+                "player": player.display_name,
+                "source": _source_label(ev.get("source", "startgg")),
+                "error": f"Skipped invalid tournament result: {exc}",
+            })
             continue
-
-        tournament = _get_or_create_tournament(ev, season)
-        if tournament is None:
-            continue
-
-        if getattr(tournament, "_created", False):
-            tournaments_created += 1
-
-        entry = TournamentEntry.query.filter_by(
-            player_id=player.id,
-            tournament_id=tournament.id,
-        ).first()
-
-        if entry is None:
-            entry = TournamentEntry(player_id=player.id, tournament_id=tournament.id)
-            db.session.add(entry)
-
-        entry.seed = ev["seed"]
-        entry.placement = ev["placement"]
-        db.session.flush()
-        entry.compute()
-        tournament.synced_at = datetime.now(timezone.utc).replace(tzinfo=None)
-        entries_upserted += 1
+        tournaments_created += created
+        entries_upserted += upserted
+        pending_results += pending
 
     return (
         tournaments_created,
@@ -203,7 +198,67 @@ def _sync_player(
     )
 
 
-def _get_or_create_tournament(ev: dict, season) -> Tournament | None:
+def _upsert_event(ev, player, season, processed_results, source_errors):
+    if ev["placement"] is None or ev["seed"] is None:
+        return 0, 0, 1
+
+    tournament = _get_or_create_tournament(ev, season, player)
+    if tournament is None:
+        return 0, 0, 0
+
+    created = int(getattr(tournament, "_created", False))
+    entrant_conflict = getattr(tournament, "_entrant_conflict", None)
+    if entrant_conflict is not None:
+        delattr(tournament, "_entrant_conflict")
+        kept_count, rejected_count = entrant_conflict
+        source_errors.append({
+            "player": player.display_name,
+            "source": _source_label(ev.get("source", "startgg")),
+            "error": (
+                "Conflicting mirrored entrant count; kept start.gg count "
+                f"{kept_count} instead of {rejected_count}."
+            ),
+        })
+    result_key = tournament.id
+    result_value = (ev["seed"], ev["placement"])
+    prior = processed_results.get(result_key)
+    if prior is not None:
+        prior_source, prior_value = prior
+        if prior_value != result_value:
+            source_errors.append({
+                "player": player.display_name,
+                "source": _source_label(ev.get("source", "startgg")),
+                "error": (
+                    "Conflicting mirrored result; kept "
+                    f"{_source_label(prior_source)} seed {prior_value[0]}, "
+                    f"placement {prior_value[1]} instead of seed {result_value[0]}, "
+                    f"placement {result_value[1]}."
+                ),
+            })
+        return created, 0, 0
+
+    entry = TournamentEntry.query.filter_by(
+        player_id=player.id,
+        tournament_id=tournament.id,
+    ).first()
+    if entry is None:
+        entry = TournamentEntry(player_id=player.id, tournament_id=tournament.id)
+        db.session.add(entry)
+
+    entry.seed = ev["seed"]
+    entry.placement = ev["placement"]
+    db.session.flush()
+    entry.compute()
+    tournament.synced_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    processed_results[result_key] = (ev.get("source", "startgg"), result_value)
+    return created, 1, 0
+
+
+def _source_label(source: str) -> str:
+    return "Parry.gg" if source == "parrygg" else "start.gg"
+
+
+def _get_or_create_tournament(ev: dict, season, player: Player | None = None) -> Tournament | None:
     """
     Look up a tournament by its provider event ID; create it if new.
     Stamps _created=True on the object when newly created.
@@ -218,18 +273,25 @@ def _get_or_create_tournament(ev: dict, season) -> Tournament | None:
     event_column = (
         Tournament.parrygg_event_id if source == "parrygg" else Tournament.startgg_event_id
     )
+    opposite_event_column = (
+        Tournament.startgg_event_id if source == "parrygg" else Tournament.parrygg_event_id
+    )
     tournament = Tournament.query.filter(
         event_column == ev["event_id"],
         Tournament.season_id == season.id,
     ).first()
 
-    if tournament is None:
+    if tournament is None and player is not None:
         # A tournament may be mirrored between providers. Exact name/date
-        # matching prevents duplicate points while avoiding fuzzy merges.
-        tournament = Tournament.query.filter(
+        # matching plus a shared player result provides cross-provider evidence
+        # without collapsing unrelated same-provider brackets.
+        tournament = Tournament.query.join(TournamentEntry).filter(
             Tournament.season_id == season.id,
             Tournament.date == local_date,
             func.lower(func.trim(Tournament.name)) == ev["tournament_name"].strip().casefold(),
+            event_column.is_(None),
+            opposite_event_column.is_not(None),
+            TournamentEntry.player_id == player.id,
         ).first()
 
     if tournament:
@@ -246,8 +308,17 @@ def _get_or_create_tournament(ev: dict, season) -> Tournament | None:
         # total_entrants is SPR's validation/clamping boundary, so recompute
         # entries when it changes.
         incoming_entrants = ev["num_entrants"]
-        if cross_source_match and tournament.total_entrants and incoming_entrants:
-            incoming_entrants = max(tournament.total_entrants, incoming_entrants)
+        if (
+            cross_source_match
+            and tournament.total_entrants
+            and incoming_entrants
+            and tournament.total_entrants != incoming_entrants
+        ):
+            if source == "startgg":
+                tournament._entrant_conflict = (incoming_entrants, tournament.total_entrants)
+            else:
+                tournament._entrant_conflict = (tournament.total_entrants, incoming_entrants)
+                incoming_entrants = tournament.total_entrants
         if incoming_entrants and tournament.total_entrants != incoming_entrants:
             tournament.total_entrants = incoming_entrants
             for entry in tournament.entries:
@@ -297,17 +368,38 @@ def _deduplicate_tournaments(season) -> tuple[int, list[dict]]:
         if t.parrygg_id:
             groups.setdefault(("parrygg", t.parrygg_id), []).append(t)
 
-    count = 0
-    stranded = []
+    by_id = {t.id: t for t in active}
+    neighbors = {t.id: set() for t in active}
     for group in groups.values():
         if len(group) <= 1:
             continue
-        group.sort(key=lambda t: t.total_entrants or 0, reverse=True)
-        kept = group[0]
-        kept_player_ids = {e.player_id for e in kept.entries}
-        for t in group[1:]:
-            if t.removed:
+        first_id = group[0].id
+        for member in group[1:]:
+            neighbors[first_id].add(member.id)
+            neighbors[member.id].add(first_id)
+
+    count = 0
+    stranded = []
+    visited = set()
+    for root in active:
+        if root.id in visited:
+            continue
+        component_ids = []
+        stack = [root.id]
+        while stack:
+            current_id = stack.pop()
+            if current_id in visited:
                 continue
+            visited.add(current_id)
+            component_ids.append(current_id)
+            stack.extend(neighbors[current_id] - visited)
+        if len(component_ids) <= 1:
+            continue
+        component = [by_id[tournament_id] for tournament_id in component_ids]
+        component.sort(key=lambda t: (-(t.total_entrants or 0), t.id))
+        kept = component[0]
+        kept_player_ids = {e.player_id for e in kept.entries}
+        for t in component[1:]:
             t.removed = True
             count += 1
             for e in t.entries:

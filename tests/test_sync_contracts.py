@@ -103,6 +103,20 @@ def test_single_player_sync_starts_for_parry_only_player(
     assert status["players"][0]["parrygg_id"] == player.parrygg_id
 
 
+def test_sync_status_reports_tournament_sources(
+    admin_client, db, make_season, make_tournament
+):
+    season = make_season()
+    tournament = make_tournament(season)
+    tournament.startgg_event_id = "start-event"
+    tournament.parrygg_event_id = "parry-event"
+    db.session.commit()
+
+    status = admin_client.get(f"/api/admin/sync/season/{season.id}/status").get_json()
+
+    assert status["tournaments"][0]["sources"] == ["start.gg", "Parry.gg"]
+
+
 def test_single_player_sync_returns_the_summary_shape_rendered_by_the_admin_ui(
     make_season, make_player, make_team
 ):
@@ -179,11 +193,94 @@ def test_cross_source_copy_of_same_tournament_does_not_duplicate_points(
     ):
         result = sync_service.sync_player(player, season)
 
-    assert result["entries_upserted"] == 2
+    assert result["entries_upserted"] == 1
     assert len(season.tournaments) == 1
     assert len(season.tournaments[0].entries) == 1
     assert season.tournaments[0].startgg_event_id == "event-1"
     assert season.tournaments[0].parrygg_event_id == "parry-event"
+
+
+def test_cross_source_conflict_keeps_first_result_and_reports_error(
+    db, make_season, make_player, make_team
+):
+    season = make_season()
+    season.sync_from = date(2026, 7, 1)
+    season.sync_to = date(2026, 7, 31)
+    player = make_player("Player", "user/player")
+    player.parrygg_id = "019585f3-1ccf-7c90-bff6-7fdd9a2e5178"
+    make_team(season, players=[player])
+    db.session.commit()
+    start_event = {**_event(1_784_442_600), "seed": 10, "placement": 4}
+    parry_event = {
+        **start_event,
+        "source": "parrygg",
+        "event_id": "parry-event",
+        "tournament_id": "parry-tournament",
+        "num_entrants": 32,
+        "seed": 9,
+        "placement": 5,
+    }
+
+    with (
+        patch("api.sync.startgg.get_player_events", return_value=[start_event]),
+        patch("api.sync.parrygg.get_player_events", return_value=[parry_event]),
+    ):
+        result = sync_service.sync_player(player, season)
+
+    entry = season.tournaments[0].entries[0]
+    assert (entry.seed, entry.placement) == (10, 4)
+    assert season.tournaments[0].total_entrants == 64
+    assert result["entries_upserted"] == 1
+    assert all(error["source"] == "Parry.gg" for error in result["errors"])
+    assert any("Conflicting mirrored result" in error["error"] for error in result["errors"])
+    assert any("Conflicting mirrored entrant count" in error["error"] for error in result["errors"])
+
+
+def test_same_source_events_with_same_name_and_date_do_not_overwrite_identity(
+    db, make_season
+):
+    season = make_season()
+    timestamp = int(
+        datetime(2026, 7, 18, 18, 0, tzinfo=ZoneInfo("America/Los_Angeles")).timestamp()
+    )
+    first_event = _event(timestamp)
+    second_event = {
+        **first_event,
+        "event_id": "event-2",
+        "tournament_id": "tournament-2",
+    }
+
+    first = sync_service._get_or_create_tournament(first_event, season)
+    second = sync_service._get_or_create_tournament(second_event, season)
+    db.session.flush()
+
+    assert first.id != second.id
+    assert first.startgg_event_id == "event-1"
+    assert second.startgg_event_id == "event-2"
+
+
+def test_malformed_second_provider_event_does_not_rollback_first_provider(
+    db, make_season, make_player, make_team
+):
+    season = make_season()
+    season.sync_from = date(2026, 7, 1)
+    season.sync_to = date(2026, 7, 31)
+    player = make_player("Player", "user/player")
+    player.parrygg_id = "019585f3-1ccf-7c90-bff6-7fdd9a2e5178"
+    make_team(season, players=[player])
+    db.session.commit()
+    start_event = {**_event(1_784_442_600), "seed": 8, "placement": 4}
+
+    with (
+        patch("api.sync.startgg.get_player_events", return_value=[start_event]),
+        patch("api.sync.parrygg.get_player_events", return_value=[{"source": "parrygg"}]),
+    ):
+        result = sync_service.sync_player(player, season)
+
+    assert result["entries_upserted"] == 1
+    assert len(season.tournaments) == 1
+    assert season.tournaments[0].entries[0].placement == 4
+    assert "Skipped invalid tournament result" in result["errors"][0]["error"]
 
 
 def test_sync_service_rejects_outsider(make_season, make_player):
@@ -240,6 +337,47 @@ def test_restore_rejects_active_duplicate_bracket(
     assert response.status_code == 409
     db.session.refresh(removed)
     assert removed.removed is True
+
+
+def test_restore_rejects_active_duplicate_parry_tournament(
+    admin_client, db, make_season, make_tournament
+):
+    season = make_season()
+    active = make_tournament(season, name="Kept")
+    active.parrygg_id = "same-parry-tournament"
+    removed = make_tournament(season, name="Duplicate", removed=True)
+    removed.parrygg_id = "same-parry-tournament"
+    db.session.commit()
+
+    response = admin_client.post(f"/api/admin/tournaments/{removed.id}/restore")
+
+    assert response.status_code == 409
+    db.session.refresh(removed)
+    assert removed.removed is True
+
+
+def test_deduplicate_uses_one_keeper_for_overlapping_provider_identity_graph(
+    db, make_season, make_player, make_tournament, make_entry
+):
+    season = make_season()
+    player_b = make_player("Player B")
+    player_c = make_player("Player C")
+    first = make_tournament(season, name="Highest", total_entrants=100)
+    first.startgg_id = "start-tournament"
+    bridge = make_tournament(season, name="Bridge", total_entrants=90)
+    bridge.startgg_id = "start-tournament"
+    bridge.parrygg_id = "parry-tournament"
+    last = make_tournament(season, name="Last", total_entrants=80)
+    last.parrygg_id = "parry-tournament"
+    make_entry(player_b, bridge, points=3)
+    make_entry(player_c, last, points=5)
+    db.session.commit()
+
+    removed, stranded = sync_service._deduplicate_tournaments(season)
+
+    assert removed == 2
+    assert [t.name for t in season.tournaments if not t.removed] == ["Highest"]
+    assert {row["kept_tournament"] for row in stranded} == {"Highest"}
 
 
 def test_soft_delete_and_restore_preserve_entries_and_public_points(

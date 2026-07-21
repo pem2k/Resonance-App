@@ -92,8 +92,8 @@ export default function SyncAdmin({ activeSeason, onSyncStart, onSyncEnd }) {
 
         {result && (
           result.error
-            ? <p className={styles.error}>✗ {result.error}</p>
-            : <div className={styles.resultBox}>
+            ? <p className={styles.error} role="alert">✗ {result.error}</p>
+            : <div className={styles.resultBox} role="status" aria-live="polite">
                 <p>✓ Players synced: <strong>{result.players_synced}</strong></p>
                 <p>✓ Tournaments created: <strong>{result.tournaments_created}</strong></p>
                 <p>✓ Entries upserted: <strong>{result.entries_upserted}</strong></p>
@@ -101,7 +101,7 @@ export default function SyncAdmin({ activeSeason, onSyncStart, onSyncEnd }) {
                 {result.players_skipped > 0 && <p className={styles.warn}>⚠ Players skipped (no tournament profile): {result.players_skipped}</p>}
                 {result.entries_pending > 0 && <p className={styles.warn}>⚠ Events with no finalized results yet: {result.entries_pending}</p>}
                 {result.errors?.map((e, i) => (
-                  <p key={i} className={styles.error}>✗ {e.player}{e.source ? ` (${e.source})` : ''}: {e.error}</p>
+                  <p key={i} className={styles.error} role="alert">✗ {e.player}{e.source ? ` (${e.source})` : ''}: {e.error}</p>
                 ))}
               </div>
         )}
@@ -146,12 +146,13 @@ export default function SyncAdmin({ activeSeason, onSyncStart, onSyncEnd }) {
           <div className={styles.tableWrap}>
             <table className={styles.table}>
               <thead>
-                <tr><th>Tournament</th><th className={styles.center}>Entrants</th><th className={styles.center}>League entries</th><th>Synced at</th></tr>
+                <tr><th>Tournament</th><th>Sources</th><th className={styles.center}>Entrants</th><th className={styles.center}>League entries</th><th>Synced at</th></tr>
               </thead>
               <tbody>
                 {status.tournaments.map(t => (
                   <tr key={t.id}>
                     <td>{t.name}</td>
+                    <td className={styles.muted}>{t.sources?.join(' + ') || 'Manual'}</td>
                     <td className={styles.center}>{t.total_entrants ?? '—'}</td>
                     <td className={styles.center}>{t.entry_count}</td>
                     <td className={styles.muted}>{t.synced_at ? new Date(t.synced_at).toLocaleDateString() : '—'}</td>

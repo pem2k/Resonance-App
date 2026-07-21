@@ -7,7 +7,7 @@ from api.extensions import db
 from api.models import Season, Team, Player, Tournament, TournamentEntry
 from api.decorators import require_admin
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy import func
+from sqlalchemy import func, or_
 
 admin = Blueprint("admin", __name__, url_prefix="/api/admin")
 admin.before_request(require_admin)
@@ -67,7 +67,12 @@ def _parrygg_id(data, key="parrygg_id"):
     if "://" in value:
         parsed = urlparse(value)
         parts = [part for part in parsed.path.split("/") if part]
-        if parsed.hostname not in {"parry.gg", "www.parry.gg"} or len(parts) != 2 or parts[0] != "profile":
+        if (
+            parsed.scheme not in {"http", "https"}
+            or parsed.hostname not in {"parry.gg", "www.parry.gg"}
+            or len(parts) != 2
+            or parts[0] != "profile"
+        ):
             raise AdminAPIError("Parry.gg profile must be a profile URL or UUID.")
         candidate = parts[1]
 
@@ -415,16 +420,21 @@ def delete_tournament(tournament_id):
 @admin.route("/tournaments/<int:tournament_id>/restore", methods=["POST"])
 def restore_tournament(tournament_id):
     tournament = db.get_or_404(Tournament, tournament_id)
+    identity_filters = []
     if tournament.startgg_id:
+        identity_filters.append(Tournament.startgg_id == tournament.startgg_id)
+    if tournament.parrygg_id:
+        identity_filters.append(Tournament.parrygg_id == tournament.parrygg_id)
+    if identity_filters:
         active_duplicate = Tournament.query.filter(
             Tournament.season_id == tournament.season_id,
-            Tournament.startgg_id == tournament.startgg_id,
+            or_(*identity_filters),
             Tournament.removed.is_(False),
             Tournament.id != tournament.id,
         ).first()
         if active_duplicate:
             raise AdminAPIError(
-                f"Cannot restore while '{active_duplicate.name}' is active for the same start.gg tournament.",
+                f"Cannot restore while '{active_duplicate.name}' is active for the same tournament-platform identity.",
                 409,
             )
     tournament.removed = False

@@ -42,7 +42,11 @@ def test_migrate_parrygg_adds_columns_to_legacy_database(tmp_path):
             table: {column["name"] for column in inspect(db.engine).get_columns(table)}
             for table in ("players", "tournaments")
         }
+        indexes = inspect(db.engine).get_indexes("players")
     assert "parrygg_id" in columns["players"]
     assert {"parrygg_id", "parrygg_slug", "parrygg_event_id"} <= columns["tournaments"]
-    assert "Added 4 Parry.gg columns." in result.output
-
+    assert any(
+        index["unique"] and index["column_names"] == ["parrygg_id"]
+        for index in indexes
+    )
+    assert "Added 4 Parry.gg columns; unique player identity index added." in result.output

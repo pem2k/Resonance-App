@@ -156,6 +156,14 @@ def sync_status(season_id):
                 "total_entrants": t.total_entrants,
                 "entry_count": len(t.entries),
                 "synced_at": t.to_dict()["synced_at"],
+                "sources": [
+                    source
+                    for source, configured in (
+                        ("start.gg", bool(t.startgg_event_id)),
+                        ("Parry.gg", bool(t.parrygg_event_id)),
+                    )
+                    if configured
+                ],
             }
             for t in sorted(
                 (t for t in season.tournaments if not t.removed),

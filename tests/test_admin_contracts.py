@@ -144,7 +144,11 @@ def test_player_accepts_parry_profile_url_and_rejects_duplicate_identity(admin_c
     assert duplicate.status_code == 409
 
 
-@pytest.mark.parametrize("value", ["not-a-uuid", "https://example.com/profile/abc"])
+@pytest.mark.parametrize("value", [
+    "not-a-uuid",
+    "https://example.com/profile/abc",
+    "ftp://parry.gg/profile/019585f3-1ccf-7c90-bff6-7fdd9a2e5178",
+])
 def test_player_rejects_invalid_parry_profile_id(admin_client, value):
     response = admin_client.post(
         "/api/admin/players",

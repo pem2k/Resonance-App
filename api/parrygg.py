@@ -12,6 +12,14 @@ _PAGE_SIZE = 100
 _MELEE_SLUG = "super-smash-bros-melee"
 
 
+class EventList(list):
+    """Normalized events plus non-fatal provider warnings."""
+
+    def __init__(self, values=(), warnings=None):
+        super().__init__(values)
+        self.warnings = warnings or []
+
+
 def _call(service: str, method: str, payload: dict, _retry: int = 3) -> dict:
     """Call one unary Parry.gg RPC through its documented JSON proxy."""
     api_key = os.getenv("PARRYGG_API_KEY")
@@ -49,15 +57,22 @@ def get_player_events(
     """Return normalized completed Melee singles results for one Parry user."""
     placement_results = _get_all_placements(user_id)
     tournament_cache: dict[str, dict] = {}
-    events = []
+    events = EventList()
 
     for result in placement_results:
         event_id = result.get("eventId")
         placement = result.get("placement") or {}
-        if not event_id or not placement.get("placement") or not placement.get("seed"):
+        seed = placement.get("seed")
+        final_placement = placement.get("placement")
+        if not event_id or not _positive_integer(seed) or not _positive_integer(final_placement):
+            events.warnings.append("Skipped a Parry.gg placement with invalid identity, seed, or placement.")
             continue
 
-        event = _call("EventService", "GetEvent", {"id": event_id}).get("event") or {}
+        try:
+            event = _call("EventService", "GetEvent", {"id": event_id}).get("event") or {}
+        except Exception as exc:
+            events.warnings.append(f"Skipped Parry.gg event {event_id}: {exc}")
+            continue
         if not _is_melee_singles(event):
             continue
 
@@ -65,15 +80,31 @@ def get_player_events(
         if not tournament_id:
             continue
         if tournament_id not in tournament_cache:
-            tournament_cache[tournament_id] = (
-                _call("TournamentService", "GetTournament", {"id": tournament_id})
-                .get("tournament")
-                or {}
-            )
+            try:
+                tournament_cache[tournament_id] = (
+                    _call("TournamentService", "GetTournament", {"id": tournament_id})
+                    .get("tournament")
+                    or {}
+                )
+            except Exception as exc:
+                events.warnings.append(f"Skipped Parry.gg tournament {tournament_id}: {exc}")
+                continue
         tournament = tournament_cache[tournament_id]
+        if not _is_public_tournament(tournament):
+            events.warnings.append(
+                f"Skipped non-public Parry.gg tournament for event {event_id}."
+            )
+            continue
 
         timestamp = _timestamp(tournament.get("startDate") or event.get("startDate"))
+        entrant_count = event.get("entrantCount")
         if timestamp is None:
+            events.warnings.append(f"Skipped Parry.gg event {event_id} with an invalid date.")
+            continue
+        if not _positive_integer(entrant_count):
+            events.warnings.append(
+                f"Skipped Parry.gg event {event_id} with an invalid entrant count."
+            )
             continue
         if after_timestamp is not None and timestamp < after_timestamp:
             continue
@@ -84,13 +115,13 @@ def get_player_events(
             "source": "parrygg",
             "event_id": str(event_id),
             "event_name": event.get("name") or "Melee Singles",
-            "num_entrants": event.get("entrantCount"),
+            "num_entrants": entrant_count,
             "tournament_id": str(tournament_id),
             "tournament_name": tournament.get("name") or event.get("name") or "Parry.gg event",
             "tournament_slug": _preferred_slug(tournament.get("slugs") or []),
             "tournament_date": timestamp,
-            "seed": placement["seed"],
-            "placement": placement["placement"],
+            "seed": seed,
+            "placement": final_placement,
         })
 
     return events
@@ -124,6 +155,14 @@ def _is_melee_singles(event: dict) -> bool:
     return game_slug == _MELEE_SLUG and event.get("entrantSize") == 1
 
 
+def _is_public_tournament(tournament: dict) -> bool:
+    return tournament.get("visibilityLevel") in {"VISIBILITY_LEVEL_PUBLIC", 1}
+
+
+def _positive_integer(value) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value > 0
+
+
 def _timestamp(value) -> int | None:
     if not isinstance(value, str) or not value:
         return None
@@ -146,4 +185,3 @@ def _preferred_slug(slugs: list[dict]) -> str | None:
             if slug_type(item) == preferred and item.get("slug"):
                 return item["slug"]
     return next((item["slug"] for item in slugs if item.get("slug")), None)
-

@@ -143,8 +143,9 @@ export default function Leaderboard({ season, seasons, onSeasonChange, standings
                         <td>
                           {t.startgg_slug
                             ? <a href={`https://www.start.gg/${t.startgg_slug}`} target="_blank" rel="noreferrer" className={styles.tournamentLink}>{t.name}</a>
-                            : t.name
-                          }
+                            : t.parrygg_slug
+                              ? <a href={`https://parry.gg/${t.parrygg_slug}`} target="_blank" rel="noreferrer" className={styles.tournamentLink}>{t.name}</a>
+                              : t.name}
                         </td>
                         <td className={`${styles.secondary} ${styles.center}`}>{t.date ?? '—'}</td>
                         <td className={`${styles.secondary} ${styles.center}`}>{t.total_entrants ?? '—'}</td>

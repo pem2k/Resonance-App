@@ -111,7 +111,7 @@ TournamentEntry  id, player_id, tournament_id, seed, placement, spr, points
 AdminUser    id, username, password_hash
 ```
 
-`db.create_all()` is used for fresh databases. Existing databases can add the nullable Parry.gg columns safely with `flask --app api migrate-parrygg`; no database reset is required.
+`db.create_all()` is used for fresh databases. Existing databases add the nullable Parry.gg columns and unique player-identity index with the idempotent `flask --app api migrate-parrygg` command; no database reset is required. The Heroku `release` process runs that command before the new web dyno starts, so a failed migration blocks the release. Capture a database backup before the first Parry-enabled deployment.
 
 ---
 
@@ -167,9 +167,9 @@ Player-centric sync: each player can have a `startgg_slug`, a `parrygg_id`, or b
 
 Filters applied in Python (not GQL): singles only (`type == 1`), date window.
 
-Parry.gg uses its documented JSON-over-HTTP proxy. `GetUserPlacements` is paginated, then `GetEvent` filters to Melee singles and `GetTournament` supplies the tournament name, date, and public slug. Exact same-name/same-date copies from both providers are merged so they cannot award duplicate points.
+Parry.gg uses its documented JSON-over-HTTP proxy. `GetUserPlacements` is paginated, then `GetEvent` filters to Melee singles and `GetTournament` supplies the tournament name, date, and public slug. Hidden and link-only tournaments are not imported. Exact same-name/same-date copies are merged only when the same rostered player's existing entry corroborates the opposite-provider match. Conflicting mirrored results keep the start.gg observation and produce an admin-visible error instead of silently changing points.
 
-Rate limiting: 0.6s sleep between every API call, exponential backoff (4s/8s/16s) on 429s.
+Rate limiting: start.gg sleeps 0.8s after successful calls and backs off 4s/8s/16s on 429s. Parry.gg does not add a successful-call delay and backs off 2s/4s/8s on 429s.
 
 SQLite WAL mode is enabled so status-poll reads don't block the long sync write. Each player is committed individually so a failure on one doesn't roll back others.
 
@@ -180,7 +180,7 @@ SQLite WAL mode is enabled so status-poll reads don't block the long sync write.
 - **start.gg filter fields that DON'T exist:** `type`, `afterDate`, `beforeDate` on `UserEventsPaginationFilter`; `isCurrentUser` and `playerIds` on `EventEntrantPageQueryFilter`. None of these work — filter in Python instead.
 - **SQLite locked during sync:** Fixed with WAL mode (`PRAGMA journal_mode=WAL`), `busy_timeout=10000`, and per-player commits.
 - **`display: flex` on `<td>`** breaks table column alignment — `.actions` td must use `text-align: right` only.
-- **DB schema changes:** `db.create_all()` does not migrate existing tables. Use the explicit schema command documented above; do not delete a populated database.
+- **DB schema changes:** `db.create_all()` does not migrate existing tables. Heroku runs the explicit idempotent migration as a release process; for other hosts, run it before starting the updated web process. Do not delete a populated database.
 - **Port 5000 conflict:** `fuser -k 5000/tcp` to kill stale Flask process.
 - **Vite proxy:** must point to `127.0.0.1:5000` not `localhost:5000`.
 

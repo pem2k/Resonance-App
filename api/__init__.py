@@ -178,6 +178,7 @@ def create_app(config=None):
                 "parrygg_event_id": "VARCHAR(50)",
             },
         }
+        unique_index_name = "ux_players_parrygg_id"
         inspector = inspect(db.engine)
         missing = []
         for table, definitions in required.items():
@@ -188,12 +189,24 @@ def create_app(config=None):
                 if column not in present
             )
 
-        if not missing:
-            click.echo("Parry.gg columns are already present.")
+        unique_constraints = inspector.get_unique_constraints("players")
+        indexes = inspector.get_indexes("players")
+        has_unique_parry_identity = any(
+            constraint.get("column_names") == ["parrygg_id"]
+            for constraint in unique_constraints
+        ) or any(
+            index.get("unique") and index.get("column_names") == ["parrygg_id"]
+            for index in indexes
+        )
+
+        if not missing and has_unique_parry_identity:
+            click.echo("Parry.gg schema is already current.")
             return
         if dry_run:
             for table, column, _sql_type in missing:
                 click.echo(f"Would add {table}.{column}")
+            if not has_unique_parry_identity:
+                click.echo("Would add a unique index for players.parrygg_id")
             return
 
         try:
@@ -201,11 +214,19 @@ def create_app(config=None):
                 db.session.execute(db.text(
                     f'ALTER TABLE "{table}" ADD COLUMN "{column}" {sql_type}'
                 ))
+            if not has_unique_parry_identity:
+                db.session.execute(db.text(
+                    f'CREATE UNIQUE INDEX "{unique_index_name}" '
+                    'ON "players" ("parrygg_id")'
+                ))
             db.session.commit()
         except Exception:
             db.session.rollback()
             raise
-        click.echo(f"Added {len(missing)} Parry.gg columns.")
+        click.echo(
+            f"Added {len(missing)} Parry.gg columns; "
+            f"unique player identity index {'already present' if has_unique_parry_identity else 'added'}."
+        )
 
     # ── Serve React (catch-all — must be registered after API blueprints) ────
     @app.route("/", defaults={"path": ""})

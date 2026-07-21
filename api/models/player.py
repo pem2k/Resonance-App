@@ -10,7 +10,7 @@ class Player(db.Model):
     startgg_id = db.Column(db.String(50), nullable=True, unique=True)
     startgg_slug = db.Column(db.String(100), nullable=True)
     # Parry.gg profile UUID — nullable until linked.
-    parrygg_id = db.Column(db.String(50), nullable=True)
+    parrygg_id = db.Column(db.String(50), nullable=True, unique=True)
 
     entries = db.relationship("TournamentEntry", back_populates="player", cascade="all, delete-orphan")
 

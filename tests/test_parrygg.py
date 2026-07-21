@@ -80,6 +80,7 @@ def test_get_player_events_paginates_and_returns_only_melee_singles():
             "id": "weekly-id",
             "name": "PNW Weekly",
             "startDate": "2026-07-10T19:00:00Z",
+            "visibilityLevel": "VISIBILITY_LEVEL_PUBLIC",
             "slugs": [
                 {"slug": "pnw-weekly-old", "type": "SLUG_TYPE_OUTDATED"},
                 {"slug": "pnw-weekly", "type": "SLUG_TYPE_PRIMARY"},
@@ -136,3 +137,85 @@ def test_get_player_events_paginates_and_returns_only_melee_singles():
         ),
     ]
 
+
+def test_get_player_events_keeps_valid_results_when_one_event_is_stale():
+    placements = {
+        "results": [
+            {"eventId": "stale-event", "placement": {"placement": 2, "seed": 3}},
+            {"eventId": "valid-event", "placement": {"placement": 4, "seed": 8}},
+        ],
+        "paginationResponse": {"hasMore": False},
+    }
+
+    def fake_call(service, method, payload):
+        identity = payload.get("id")
+        if method == "GetUserPlacements":
+            return placements
+        if identity == "stale-event":
+            raise RuntimeError("not found")
+        if identity == "valid-event":
+            return {"event": {
+                "id": identity,
+                "tournamentId": "valid-tournament",
+                "name": "Melee Singles",
+                "entrantSize": 1,
+                "entrantCount": 16,
+                "game": {"slug": "super-smash-bros-melee"},
+            }}
+        if identity == "valid-tournament":
+            return {"tournament": {
+                "id": identity,
+                "name": "Valid Weekly",
+                "startDate": "2026-07-10T19:00:00Z",
+                "visibilityLevel": "VISIBILITY_LEVEL_PUBLIC",
+            }}
+        raise AssertionError((service, method, payload))
+
+    with patch("api.parrygg._call", side_effect=fake_call):
+        events = parrygg.get_player_events("player-id")
+
+    assert [event["event_id"] for event in events] == ["valid-event"]
+    assert events.warnings == ["Skipped Parry.gg event stale-event: not found"]
+
+
+@pytest.mark.parametrize(
+    ("visibility", "entrant_count", "warning"),
+    [
+        ("VISIBILITY_LEVEL_HIDDEN", 16, "non-public"),
+        ("VISIBILITY_LEVEL_LINK_ONLY", 16, "non-public"),
+        ("VISIBILITY_LEVEL_PUBLIC", 0, "entrant count"),
+    ],
+)
+def test_get_player_events_skips_non_public_or_invalid_events(
+    visibility, entrant_count, warning
+):
+    def fake_call(_service, method, payload):
+        if method == "GetUserPlacements":
+            return {
+                "results": [{
+                    "eventId": "event-id",
+                    "placement": {"placement": 2, "seed": 3},
+                }],
+                "paginationResponse": {"hasMore": False},
+            }
+        if method == "GetEvent":
+            return {"event": {
+                "id": "event-id",
+                "tournamentId": "tournament-id",
+                "name": "Melee Singles",
+                "entrantSize": 1,
+                "entrantCount": entrant_count,
+                "game": {"slug": "super-smash-bros-melee"},
+            }}
+        return {"tournament": {
+            "id": payload["id"],
+            "name": "Tournament",
+            "startDate": "2026-07-10T19:00:00Z",
+            "visibilityLevel": visibility,
+        }}
+
+    with patch("api.parrygg._call", side_effect=fake_call):
+        events = parrygg.get_player_events("player-id")
+
+    assert events == []
+    assert warning in events.warnings[0]
