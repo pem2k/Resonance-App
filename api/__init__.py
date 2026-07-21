@@ -115,6 +115,51 @@ def create_app(config=None):
                 click.echo(f"Admin user '{username}' created.")
             db.session.commit()
 
+    @app.cli.command("recompute-points")
+    @click.option(
+        "--dry-run",
+        is_flag=True,
+        help="Report changes without saving them.",
+    )
+    def recompute_points(dry_run):
+        """Recompute stored SPR and points for every tournament entry."""
+        entries = TournamentEntry.query.order_by(TournamentEntry.id).all()
+        changed = 0
+        skipped = 0
+        net_point_change = 0
+
+        try:
+            for entry in entries:
+                if (
+                    entry.seed is None
+                    or entry.placement is None
+                    or entry.tournament is None
+                    or entry.tournament.total_entrants is None
+                ):
+                    skipped += 1
+                    continue
+
+                previous = (entry.spr, entry.points)
+                entry.compute()
+                current = (entry.spr, entry.points)
+                if current != previous:
+                    changed += 1
+                    net_point_change += current[1] - previous[1]
+
+            if dry_run:
+                db.session.rollback()
+            else:
+                db.session.commit()
+        except Exception:
+            db.session.rollback()
+            raise
+
+        verb = "Would update" if dry_run else "Updated"
+        click.echo(
+            f"{verb} {changed} of {len(entries)} entries; "
+            f"skipped {skipped}; net point change {net_point_change:+d}."
+        )
+
     # ── Serve React (catch-all — must be registered after API blueprints) ────
     @app.route("/", defaults={"path": ""})
     @app.route("/<path:path>")

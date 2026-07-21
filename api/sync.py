@@ -180,8 +180,8 @@ def _get_or_create_tournament(ev: dict, season) -> Tournament | None:
             return None  # excluded from sync
         # Repair dates previously derived from UTC and keep upstream changes in sync.
         tournament.date = local_date
-        # Keep total_entrants up to date; N changed → stored SPR/points of
-        # every existing entry are stale, so recompute them all.
+        # total_entrants is SPR's validation/clamping boundary, so recompute
+        # entries when it changes.
         if tournament.total_entrants != ev["num_entrants"]:
             tournament.total_entrants = ev["num_entrants"]
             for entry in tournament.entries:

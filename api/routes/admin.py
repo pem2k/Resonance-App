@@ -362,7 +362,8 @@ def update_tournament(tournament_id):
         )
         if total_entrants != tournament.total_entrants:
             tournament.total_entrants = total_entrants
-            # SPR/points are derived from total_entrants — recompute all entries
+            # total_entrants is SPR's validation/clamping boundary. Recompute
+            # so anomalous seeds or placements stay current when it changes.
             try:
                 for entry in tournament.entries:
                     entry.compute()

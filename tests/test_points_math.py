@@ -10,6 +10,18 @@ def test_calculate_spr_known_power_of_two_cases():
     assert calculate_spr(seed=64, placement=32, total_entrants=64) == 1
 
 
+def test_calculate_spr_uses_placement_rounds_in_non_power_of_two_brackets():
+    # These are two-round improvements even though the entrant count is not a
+    # power of two. Anchoring round boundaries to N misclassifies both as +1.
+    assert calculate_spr(seed=10, placement=4, total_entrants=30) == 2
+    assert calculate_spr(seed=19, placement=5, total_entrants=19) == 2
+
+
+def test_calculate_spr_round_tiers_do_not_shift_with_bracket_size():
+    assert calculate_spr(seed=10, placement=4, total_entrants=30) == 2
+    assert calculate_spr(seed=10, placement=4, total_entrants=64) == 2
+
+
 def test_calculate_spr_boundary_placements_and_log2_floor_edges():
     assert calculate_spr(seed=4, placement=1, total_entrants=64) == 2
     assert calculate_spr(seed=4, placement=2, total_entrants=64) == 1

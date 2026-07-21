@@ -6,17 +6,18 @@ def calculate_spr(seed: int, placement: int, total_entrants: int) -> int:
     Compute Seed Performance Rating from bracket seed, final placement,
     and total number of entrants in the tournament.
 
-    Formula: floor(log2(N / placement)) - floor(log2(N / seed))
+    Formula: ceil(log2(seed)) - ceil(log2(placement))
 
-    This counts actual rounds survived vs rounds expected based on seed,
-    anchored to the real bracket size. Works correctly for non-power-of-2
-    entrant counts (e.g. Genesis with 1000+ players).
+    This compares the placement round tier with the seed round tier. Round
+    boundaries are 1, 2, 3-4, 5-8, 9-16, and so on, independent of the
+    tournament's entrant count. The entrant count remains a validation and
+    clamping boundary for anomalous start.gg values.
 
-    Examples (N=1000):
-      seed=1000, placement=1000 →  0  (attended, lost round 1 as expected)
-      seed=1000, placement=499  → +1  (survived round 1, one better than expected)
-      seed=8,    placement=4    → +1
-      seed=1,    placement=2    → -1  (seeded 1st, lost in finals)
+    Examples:
+      seed=10, placement=4  → +2
+      seed=8,  placement=4  → +1
+      seed=4,  placement=3  →  0
+      seed=1,  placement=2  → -1
     """
     if seed <= 0 or placement <= 0 or total_entrants <= 0:
         raise ValueError("seed, placement, and total_entrants must be positive integers")
@@ -26,9 +27,9 @@ def calculate_spr(seed: int, placement: int, total_entrants: int) -> int:
     seed = min(seed, total_entrants)
     placement = min(placement, total_entrants)
 
-    seed_rounds = math.floor(math.log2(total_entrants / seed))
-    placement_rounds = math.floor(math.log2(total_entrants / placement))
-    return placement_rounds - seed_rounds
+    seed_tier = math.ceil(math.log2(seed))
+    placement_tier = math.ceil(math.log2(placement))
+    return seed_tier - placement_tier
 
 
 def spr_to_points(spr: int) -> int:
