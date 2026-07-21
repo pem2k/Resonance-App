@@ -25,17 +25,24 @@ def test_team_create_and_rename_validate_names_and_conflicts(admin_client, make_
     created = admin_client.post(
         "/api/admin/teams", json={"name": "  Team Beta  ", "season_id": season.id}
     )
+    created_id = created.get_json()["id"]
+    blank_rename = admin_client.put(
+        f"/api/admin/teams/{created_id}", json={"name": "   "}
+    )
+    unchanged = admin_client.get(f"/api/teams/{created_id}")
     renamed = admin_client.put(
-        f"/api/admin/teams/{created.get_json()['id']}", json={"name": " Team Gamma "}
+        f"/api/admin/teams/{created_id}", json={"name": " Team Gamma "}
     )
     rename_conflict = admin_client.put(
-        f"/api/admin/teams/{created.get_json()['id']}", json={"name": existing.name.lower()}
+        f"/api/admin/teams/{created_id}", json={"name": existing.name.lower()}
     )
 
     assert blank.status_code == 400
     assert duplicate.status_code == 409
     assert created.status_code == 201
     assert created.get_json()["name"] == "Team Beta"
+    assert blank_rename.status_code == 400
+    assert unchanged.get_json()["name"] == "Team Beta"
     assert renamed.status_code == 200
     assert renamed.get_json()["name"] == "Team Gamma"
     assert rename_conflict.status_code == 409
@@ -68,6 +75,7 @@ def test_team_rename_only_changes_name_across_admin_and_public_views(
         entry.id: (
             entry.player_id,
             entry.tournament_id,
+            entry.spr,
             entry.points,
             entry.seed,
             entry.placement,
@@ -102,6 +110,7 @@ def test_team_rename_only_changes_name_across_admin_and_public_views(
         assert (
             entry.player_id,
             entry.tournament_id,
+            entry.spr,
             entry.points,
             entry.seed,
             entry.placement,
@@ -113,6 +122,7 @@ def test_team_rename_only_changes_name_across_admin_and_public_views(
     assert before_team["total_points"] == expected_total
     assert after_team["name"] == "Renamed Team"
     assert after_team["total_points"] == expected_total
+    assert after_team["captain"] == before_team["captain"]
     assert {player["id"] for player in after_team["roster"]} == {captain.id, member.id}
 
     player_rows = admin_client.get(f"/api/seasons/{season.id}/players").get_json()
