@@ -25,20 +25,111 @@ def test_team_create_and_rename_validate_names_and_conflicts(admin_client, make_
     created = admin_client.post(
         "/api/admin/teams", json={"name": "  Team Beta  ", "season_id": season.id}
     )
+    created_id = created.get_json()["id"]
+    blank_rename = admin_client.put(
+        f"/api/admin/teams/{created_id}", json={"name": "   "}
+    )
+    unchanged = admin_client.get(f"/api/teams/{created_id}")
     renamed = admin_client.put(
-        f"/api/admin/teams/{created.get_json()['id']}", json={"name": " Team Gamma "}
+        f"/api/admin/teams/{created_id}", json={"name": " Team Gamma "}
     )
     rename_conflict = admin_client.put(
-        f"/api/admin/teams/{created.get_json()['id']}", json={"name": existing.name.lower()}
+        f"/api/admin/teams/{created_id}", json={"name": existing.name.lower()}
     )
 
     assert blank.status_code == 400
     assert duplicate.status_code == 409
     assert created.status_code == 201
     assert created.get_json()["name"] == "Team Beta"
+    assert blank_rename.status_code == 400
+    assert unchanged.get_json()["name"] == "Team Beta"
     assert renamed.status_code == 200
     assert renamed.get_json()["name"] == "Team Gamma"
     assert rename_conflict.status_code == 409
+
+
+@pytest.mark.parametrize("has_captain", [False, True])
+def test_team_rename_only_changes_name_across_admin_and_public_views(
+    admin_client,
+    db,
+    make_season,
+    make_player,
+    make_team,
+    make_tournament,
+    make_entry,
+    has_captain,
+):
+    season = make_season(status="active")
+    captain = make_player("Captain")
+    member = make_player("Member")
+    team = make_team(
+        season,
+        name="Original Team",
+        players=[captain, member],
+        captain=captain if has_captain else None,
+    )
+    tournament = make_tournament(season)
+    captain_entry = make_entry(captain, tournament, points=5, seed=3, placement=2)
+    member_entry = make_entry(member, tournament, points=7, seed=8, placement=4)
+    entry_snapshot = {
+        entry.id: (
+            entry.player_id,
+            entry.tournament_id,
+            entry.spr,
+            entry.points,
+            entry.seed,
+            entry.placement,
+        )
+        for entry in (captain_entry, member_entry)
+    }
+    expected_total = (
+        member_entry.points
+        if has_captain
+        else captain_entry.points + member_entry.points
+    )
+
+    before_standings = admin_client.get(f"/api/seasons/{season.id}/standings").get_json()
+    before_team = next(row for row in before_standings if row["id"] == team.id)
+
+    response = admin_client.put(
+        f"/api/admin/teams/{team.id}",
+        json={"name": " Renamed Team "},
+    )
+
+    assert response.status_code == 200
+    assert response.get_json()["name"] == "Renamed Team"
+
+    persisted = db.session.get(Team, team.id)
+    assert persisted.name == "Renamed Team"
+    assert persisted.season_id == season.id
+    assert persisted.captain_id == (captain.id if has_captain else None)
+    assert {player.id for player in persisted.roster} == {captain.id, member.id}
+
+    for entry_id, expected in entry_snapshot.items():
+        entry = db.session.get(TournamentEntry, entry_id)
+        assert (
+            entry.player_id,
+            entry.tournament_id,
+            entry.spr,
+            entry.points,
+            entry.seed,
+            entry.placement,
+        ) == expected
+
+    after_standings = admin_client.get(f"/api/seasons/{season.id}/standings").get_json()
+    after_team = next(row for row in after_standings if row["id"] == team.id)
+    assert before_team["name"] == "Original Team"
+    assert before_team["total_points"] == expected_total
+    assert after_team["name"] == "Renamed Team"
+    assert after_team["total_points"] == expected_total
+    assert after_team["captain"] == before_team["captain"]
+    assert {player["id"] for player in after_team["roster"]} == {captain.id, member.id}
+
+    player_rows = admin_client.get(f"/api/seasons/{season.id}/players").get_json()
+    team_player_rows = [row for row in player_rows if row["team"]["id"] == team.id]
+    expected_player_ids = {member.id} if has_captain else {captain.id, member.id}
+    assert {row["id"] for row in team_player_rows} == expected_player_ids
+    assert {row["team"]["name"] for row in team_player_rows} == {"Renamed Team"}
 
 
 def test_team_create_rejects_unknown_season_and_initial_captain(
