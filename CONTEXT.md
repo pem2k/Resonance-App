@@ -206,6 +206,11 @@ keepalive is not required.
 - Admin tab in header only visible when logged in; logging out redirects to Leaderboard
 - Tables are horizontally scrollable on mobile; some columns hidden at ≤560px breakpoint
 - Captains shown in team roster UI but excluded from leaderboard query and point sums
+- Admin team renames update the existing team row in place. Roster membership,
+  captain assignment, tournament entries, and calculated totals are preserved;
+  public team and player views reflect the new name immediately.
+- Captainless teams remain valid, and every roster member contributes to their
+  team total until a captain is assigned.
 - `points_per_event` field in player leaderboard is `total_points / events_attended`, rounded to 1 decimal (renamed from the misleading `avg_spr`)
 
 ---
@@ -214,5 +219,4 @@ keepalive is not required.
 
 - Finale bracket seeding logic
 - Public-facing About page content (placeholder exists)
-- Discord link (placeholder URL in Header.jsx)
 - Multi-season UI on the public leaderboard (currently auto-selects active/first season)
