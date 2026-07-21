@@ -74,8 +74,12 @@ EOF
 
 ## Points System (SPR = Seed Performance Rating)
 
-SPR formula: `floor(log2(N / placement)) - floor(log2(N / seed))`
-where N = total_entrants in the tournament.
+SPR counts the difference between the double-elimination finish tier projected
+by a player's seed and their actual finish tier. The ordered tiers are 1st,
+2nd, 3rd, 4th, 5th–6th, 7th–8th, 9th–12th, 13th–16th, and so on. For example,
+a 10th seed is projected to finish 9th; placing 4th passes through 7th, 5th,
+and 4th for SPR +3. Tournament entrant count validates and clamps anomalous
+seed or placement values.
 
 | SPR | Points |
 |---|---|

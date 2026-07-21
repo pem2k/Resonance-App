@@ -130,7 +130,7 @@ sequenceDiagram
 
 ```mermaid
 graph LR
-    IN["seed + placement\n+ total_entrants"] --> CALC["floor(log2(N/placement))\n− floor(log2(N/seed))"]
+    IN["seed + placement\n+ total_entrants"] --> CALC["projected finish tier\n− actual finish tier"]
     CALC --> SPR["SPR value"]
     SPR --> PTS["spr_to_points()"]
     PTS --> STORED["points stored\non TournamentEntry"]

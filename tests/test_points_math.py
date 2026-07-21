@@ -5,27 +5,35 @@ from api.utils import calculate_spr, spr_to_points
 
 def test_calculate_spr_known_power_of_two_cases():
     assert calculate_spr(seed=1, placement=1, total_entrants=64) == 0
-    assert calculate_spr(seed=8, placement=4, total_entrants=64) == 1
+    assert calculate_spr(seed=8, placement=4, total_entrants=64) == 2
     assert calculate_spr(seed=1, placement=2, total_entrants=64) == -1
-    assert calculate_spr(seed=64, placement=32, total_entrants=64) == 1
+    assert calculate_spr(seed=64, placement=32, total_entrants=64) == 2
 
 
 def test_calculate_spr_uses_placement_rounds_in_non_power_of_two_brackets():
-    # These are two-round improvements even though the entrant count is not a
-    # power of two. Anchoring round boundaries to N misclassifies both as +1.
-    assert calculate_spr(seed=10, placement=4, total_entrants=30) == 2
-    assert calculate_spr(seed=19, placement=5, total_entrants=19) == 2
+    assert calculate_spr(seed=10, placement=4, total_entrants=30) == 3
+    assert calculate_spr(seed=19, placement=5, total_entrants=19) == 4
+
+
+@pytest.mark.parametrize(
+    "placement, expected_spr",
+    [(10, 0), (9, 0), (8, 1), (7, 1), (6, 2), (5, 2), (4, 3)],
+)
+def test_calculate_spr_counts_each_double_elimination_finish_step(placement, expected_spr):
+    # A 10th seed is projected to finish 9th. Advancing through the distinct
+    # 7th-, 5th-, and 4th-place steps earns one SPR for each step.
+    assert calculate_spr(seed=10, placement=placement, total_entrants=30) == expected_spr
 
 
 def test_calculate_spr_round_tiers_do_not_shift_with_bracket_size():
-    assert calculate_spr(seed=10, placement=4, total_entrants=30) == 2
-    assert calculate_spr(seed=10, placement=4, total_entrants=64) == 2
+    assert calculate_spr(seed=10, placement=4, total_entrants=30) == 3
+    assert calculate_spr(seed=10, placement=4, total_entrants=64) == 3
 
 
-def test_calculate_spr_boundary_placements_and_log2_floor_edges():
-    assert calculate_spr(seed=4, placement=1, total_entrants=64) == 2
-    assert calculate_spr(seed=4, placement=2, total_entrants=64) == 1
-    assert calculate_spr(seed=4, placement=3, total_entrants=64) == 0
+def test_calculate_spr_boundary_placements_and_finish_step_edges():
+    assert calculate_spr(seed=4, placement=1, total_entrants=64) == 3
+    assert calculate_spr(seed=4, placement=2, total_entrants=64) == 2
+    assert calculate_spr(seed=4, placement=3, total_entrants=64) == 1
     assert calculate_spr(seed=4, placement=4, total_entrants=64) == 0
     assert calculate_spr(seed=17, placement=16, total_entrants=64) == 1
     assert calculate_spr(seed=16, placement=17, total_entrants=64) == -1
@@ -33,7 +41,11 @@ def test_calculate_spr_boundary_placements_and_log2_floor_edges():
 
 def test_calculate_spr_clamps_seed_and_placement_above_total_entrants():
     assert calculate_spr(seed=128, placement=128, total_entrants=64) == 0
-    assert calculate_spr(seed=128, placement=32, total_entrants=64) == 1
+    assert calculate_spr(seed=128, placement=32, total_entrants=64) == 2
+
+
+def test_calculate_spr_supports_brackets_beyond_static_tier_lists():
+    assert calculate_spr(seed=5000, placement=2048, total_entrants=8192) == 3
 
 
 @pytest.mark.parametrize(

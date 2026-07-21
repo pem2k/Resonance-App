@@ -30,4 +30,4 @@ def test_recompute_points_cli_supports_dry_run_and_commit(
     assert "Updated 1 of 1 entries" in committed.output
     db.session.expire_all()
     updated = db.session.get(type(entry), entry_id)
-    assert (updated.spr, updated.points) == (2, 5)
+    assert (updated.spr, updated.points) == (3, 10)
