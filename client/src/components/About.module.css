@@ -76,7 +76,7 @@
   border-bottom: none;
 }
 
-.positive { color: var(--green); font-weight: 600; }
+.positive { color: var(--success); font-weight: 600; }
 .muted    { color: var(--text-muted); }
 
 .pts {

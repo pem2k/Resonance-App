@@ -26,7 +26,7 @@
 }
 
 .error {
-  color: var(--red);
+  color: var(--danger);
   font-size: 13px;
   margin: 0;
 }
@@ -119,7 +119,7 @@
 
 .deleteBtn {
   font-size: 12px;
-  color: var(--red);
+  color: var(--danger);
   opacity: 0.7;
   padding: 3px 8px;
   border-radius: 4px;
@@ -131,7 +131,7 @@
 
 .deleteBtn:hover:not(:disabled) {
   opacity: 1;
-  border-color: var(--red);
+  border-color: var(--danger);
 }
 
 .deleteBtn:disabled {
@@ -141,7 +141,7 @@
 
 .restoreBtn {
   font-size: 12px;
-  color: var(--green);
+  color: var(--success);
   opacity: 0.7;
   padding: 3px 8px;
   border-radius: 4px;
@@ -153,7 +153,7 @@
 
 .restoreBtn:hover:not(:disabled) {
   opacity: 1;
-  border-color: var(--green);
+  border-color: var(--success);
 }
 
 .restoreBtn:disabled {
