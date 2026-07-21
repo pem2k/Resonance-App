@@ -6,7 +6,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node --test src/components/leaderboardFormatting.test.mjs"
+    "test": "node --test src/components/*.test.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",
