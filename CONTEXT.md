@@ -173,6 +173,20 @@ Rate limiting: start.gg sleeps 0.8s after successful calls and backs off 4s/8s/1
 
 SQLite WAL mode is enabled so status-poll reads don't block the long sync write. Each player is committed individually so a failure on one doesn't roll back others.
 
+Production autosync uses an hourly Heroku Scheduler job:
+
+```bash
+flask --app api auto-sync --min-interval-hours 4
+```
+
+The command stores per-season run state in `auto_sync_states`, so hourly
+invocations only fetch providers after four hours have elapsed. A PostgreSQL
+advisory lock prevents overlapping one-off dynos. Total provider failures exit
+nonzero and are retried by the next hourly invocation; partial successful runs
+are recorded as `partial`. Use `--dry-run` to inspect eligibility without API
+calls or writes. Heroku Scheduler starts its own one-off dyno, so a web-dyno
+keepalive is not required.
+
 ---
 
 ## Known Quirks / Past Bugs Fixed
