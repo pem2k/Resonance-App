@@ -113,16 +113,24 @@ function TeamRosterDialog({ team, onClose }) {
 export default function Leaderboard({ season, seasons, onSeasonChange, standings, players, tournaments, loading, error }) {
   const [selectedTeamId, setSelectedTeamId] = useState(null)
   const teamButtonRefs = useRef(new Map())
+  const returnFocusRef = useRef(null)
   const selectedTeam = standings.find(team => team.id === selectedTeamId) ?? null
 
   useEffect(() => {
     setSelectedTeamId(null)
   }, [season?.id])
 
+  useEffect(() => {
+    if (selectedTeamId !== null || !returnFocusRef.current) return
+
+    const trigger = returnFocusRef.current
+    returnFocusRef.current = null
+    trigger.focus()
+  }, [selectedTeamId])
+
   function closeTeamCard() {
-    const trigger = teamButtonRefs.current.get(selectedTeamId)
+    returnFocusRef.current = teamButtonRefs.current.get(selectedTeamId) ?? null
     setSelectedTeamId(null)
-    trigger?.focus()
   }
 
   if (loading) return <p className={styles.state}>Loading...</p>

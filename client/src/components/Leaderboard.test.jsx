@@ -37,6 +37,7 @@ function leaderboardElement(standings, selectedSeason = season) {
 
 function renderLeaderboard(standings = [team()]) {
   const focusByLabel = new Map()
+  const inertStateWhenFocused = new Map()
   let view
 
   act(() => {
@@ -45,8 +46,14 @@ function renderLeaderboard(standings = [team()]) {
       {
         createNodeMock: element => {
           if (element.type !== 'button') return null
-          const node = { focus: vi.fn() }
           const label = element.props['aria-label'] ?? element.props.children
+          const node = {
+            focus: vi.fn(() => {
+              if (!view) return
+              const background = view.root.findByProps({ 'data-testid': 'leaderboard-content' })
+              inertStateWhenFocused.set(label, background.props.inert)
+            }),
+          }
           focusByLabel.set(label, node)
           return node
         },
@@ -58,7 +65,7 @@ function renderLeaderboard(standings = [team()]) {
     act(() => view.update(leaderboardElement(nextStandings, nextSeason)))
   }
 
-  return { view, focusByLabel, rerender }
+  return { view, focusByLabel, inertStateWhenFocused, rerender }
 }
 
 function teamButton(view, name = 'Team Alpha') {
@@ -184,7 +191,7 @@ describe('team roster card', () => {
   })
 
   it('closes on Escape, restores page scrolling, and returns focus to the team button', () => {
-    const { view, focusByLabel } = renderLeaderboard()
+    const { view, focusByLabel, inertStateWhenFocused } = renderLeaderboard()
     const button = teamButton(view)
 
     act(() => button.props.onClick())
@@ -198,6 +205,7 @@ describe('team roster card', () => {
     expect(document.body.style.overflow).toBe('')
     expect(escapeEvent.preventDefault).toHaveBeenCalled()
     expect(teamButtonNode.focus).toHaveBeenCalled()
+    expect(inertStateWhenFocused.get('Team Alpha')).toBeUndefined()
   })
 
   it('traps Tab on the labeled close button', () => {
