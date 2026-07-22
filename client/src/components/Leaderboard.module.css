@@ -133,6 +133,19 @@
 .teamName,
 .playerName { font-weight: 600; }
 
+.teamRow {
+  cursor: pointer;
+}
+
+.teamRow:has(.teamButton:focus-visible) {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+.teamRow:has(.teamButton:focus-visible) td {
+  background: var(--bg-hover);
+}
+
 .teamButton {
   appearance: none;
   border: 0;
@@ -141,14 +154,17 @@
   font: inherit;
   font-weight: inherit;
   cursor: pointer;
-  text-decoration: underline;
-  text-decoration-color: var(--text-muted);
-  text-underline-offset: 3px;
 }
 
-.teamButton:hover {
-  color: var(--accent-hover);
-  text-decoration-color: currentColor;
+.teamButton:focus-visible {
+  outline: none;
+}
+
+@supports not selector(:has(*)) {
+  .teamButton:focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+  }
 }
 
 .tournamentLink {
