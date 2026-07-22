@@ -129,6 +129,24 @@
 .teamName,
 .playerName { font-weight: 600; }
 
+.teamButton {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-weight: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: var(--text-muted);
+  text-underline-offset: 3px;
+}
+
+.teamButton:hover {
+  color: var(--accent-hover);
+  text-decoration-color: currentColor;
+}
+
 .tournamentLink {
   color: var(--text-primary);
   text-decoration: none;
@@ -161,6 +179,127 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Team roster dialog */
+.rosterBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: var(--overlay);
+}
+
+.rosterDialog {
+  width: min(100%, 480px);
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+  padding: 24px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-card);
+  box-shadow: 0 20px 60px var(--overlay);
+}
+
+.rosterHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.rosterEyebrow {
+  margin-bottom: 4px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.rosterTitle {
+  color: var(--text-primary);
+  font-size: clamp(22px, 5vw, 28px);
+  line-height: 1.2;
+}
+
+.rosterClose {
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--action-border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.rosterClose:hover {
+  background: var(--action-bg);
+}
+
+.rosterSummary {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 20px 0 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.rosterPoints {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.rosterList {
+  display: grid;
+  gap: 8px;
+  list-style: none;
+}
+
+.rosterMember {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 46px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-tertiary);
+}
+
+.rosterMemberName {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.captainBadge {
+  flex: 0 0 auto;
+  padding: 2px 8px;
+  border: 1px solid var(--success-border);
+  border-radius: 999px;
+  background: var(--success-bg);
+  color: var(--success);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.rosterEmpty {
+  padding: 24px 12px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
 /* ── Responsive ────────────────────────────────────────────────── */
 
 /* Tablet: tighten padding */
@@ -190,4 +329,11 @@
   .playerTable td:nth-child(3),
   .playerTable th:nth-child(5),
   .playerTable td:nth-child(5) { display: none; }
+
+  .rosterBackdrop { padding: 12px; }
+
+  .rosterDialog {
+    max-height: calc(100vh - 24px);
+    padding: 18px;
+  }
 }

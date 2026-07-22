@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react'
 import styles from './Leaderboard.module.css'
 import { formatPointsPerEvent } from './leaderboardFormatting.mjs'
 
@@ -18,7 +19,112 @@ function captainLabel(captain) {
   return captain.display_name.toLowerCase() === 'no captain' ? 'n/a' : captain.display_name
 }
 
+function TeamRosterDialog({ team, onClose }) {
+  const closeButtonRef = useRef(null)
+  const roster = team.roster ?? []
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    closeButtonRef.current?.focus()
+
+    return () => {
+      document.body.style.overflow = previousOverflow
+    }
+  }, [])
+
+  function handleKeyDown(event) {
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      event.stopPropagation()
+      onClose()
+      return
+    }
+
+    // Close is the dialog's only interactive control, so keep Tab focus there.
+    if (event.key === 'Tab') {
+      event.preventDefault()
+      closeButtonRef.current?.focus()
+    }
+  }
+
+  function handleBackdropClick(event) {
+    if (event.target === event.currentTarget) onClose()
+  }
+
+  return (
+    <div
+      className={styles.rosterBackdrop}
+      data-testid="team-roster-backdrop"
+      onClick={handleBackdropClick}
+    >
+      <section
+        id="team-roster-dialog"
+        className={styles.rosterDialog}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="team-roster-title"
+        aria-describedby="team-roster-summary"
+        onKeyDown={handleKeyDown}
+      >
+        <div className={styles.rosterHeader}>
+          <div>
+            <p className={styles.rosterEyebrow}>Team roster</p>
+            <h2 id="team-roster-title" className={styles.rosterTitle}>{team.name}</h2>
+          </div>
+          <button
+            ref={closeButtonRef}
+            type="button"
+            className={styles.rosterClose}
+            aria-label={`Close ${team.name} roster`}
+            onClick={onClose}
+          >
+            ×
+          </button>
+        </div>
+
+        <div id="team-roster-summary" className={styles.rosterSummary}>
+          <span>{roster.length} {roster.length === 1 ? 'member' : 'members'}</span>
+          <span className={styles.rosterPoints}>
+            {team.total_points} {team.total_points === 1 ? 'point' : 'points'}
+          </span>
+        </div>
+
+        {roster.length > 0 ? (
+          <ul className={styles.rosterList}>
+            {roster.map(member => {
+              const isCaptain = team.captain?.id === member.id
+              return (
+                <li key={member.id} className={styles.rosterMember}>
+                  <span className={styles.rosterMemberName}>{member.display_name}</span>
+                  {isCaptain && <span className={styles.captainBadge}>Captain</span>}
+                </li>
+              )
+            })}
+          </ul>
+        ) : (
+          <p className={styles.rosterEmpty}>No members are assigned to this team yet.</p>
+        )}
+      </section>
+    </div>
+  )
+}
+
 export default function Leaderboard({ season, seasons, onSeasonChange, standings, players, tournaments, loading, error }) {
+  const [selectedTeamId, setSelectedTeamId] = useState(null)
+  const teamButtonRefs = useRef(new Map())
+  const selectedTeam = standings.find(team => team.id === selectedTeamId) ?? null
+
+  useEffect(() => {
+    setSelectedTeamId(null)
+  }, [season?.id])
+
+  function closeTeamCard() {
+    const trigger = teamButtonRefs.current.get(selectedTeamId)
+    setSelectedTeamId(null)
+    trigger?.focus()
+  }
+
   if (loading) return <p className={styles.state}>Loading...</p>
   if (error)   return <p className={styles.state}>{error}</p>
   if (!season) return <p className={styles.state}>No active season.</p>
@@ -63,7 +169,22 @@ export default function Leaderboard({ season, seasons, onSeasonChange, standings
                 {standings.map((team, i) => (
                   <tr key={team.id}>
                     <td><RankCell rank={i + 1} /></td>
-                    <td className={`${styles.teamName} ${styles.center}`}>{team.name}</td>
+                    <td className={`${styles.teamName} ${styles.center}`}>
+                      <button
+                        ref={node => {
+                          if (node) teamButtonRefs.current.set(team.id, node)
+                          else teamButtonRefs.current.delete(team.id)
+                        }}
+                        type="button"
+                        className={styles.teamButton}
+                        aria-haspopup="dialog"
+                        aria-controls={selectedTeamId === team.id ? 'team-roster-dialog' : undefined}
+                        aria-expanded={selectedTeamId === team.id}
+                        onClick={() => setSelectedTeamId(team.id)}
+                      >
+                        {team.name}
+                      </button>
+                    </td>
                     <td className={`${styles.secondary} ${styles.center}`}>
                       {captainLabel(team.captain)}
                     </td>
@@ -159,7 +280,7 @@ export default function Leaderboard({ season, seasons, onSeasonChange, standings
         </section>
       )}
 
-
+      {selectedTeam && <TeamRosterDialog team={selectedTeam} onClose={closeTeamCard} />}
     </div>
   )
 }
