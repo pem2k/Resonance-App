@@ -181,7 +181,11 @@ export default function Leaderboard({ season, seasons, onSeasonChange, standings
               </thead>
               <tbody>
                 {standings.map((team, i) => (
-                  <tr key={team.id}>
+                  <tr
+                    key={team.id}
+                    className={styles.teamRow}
+                    onClick={() => setSelectedTeamId(team.id)}
+                  >
                     <td><RankCell rank={i + 1} /></td>
                     <td className={`${styles.teamName} ${styles.center}`}>
                       <button
@@ -194,7 +198,10 @@ export default function Leaderboard({ season, seasons, onSeasonChange, standings
                         aria-haspopup="dialog"
                         aria-controls={selectedTeamId === team.id ? 'team-roster-dialog' : undefined}
                         aria-expanded={selectedTeamId === team.id}
-                        onClick={() => setSelectedTeamId(team.id)}
+                        onClick={event => {
+                          event.stopPropagation()
+                          setSelectedTeamId(team.id)
+                        }}
                       >
                         {team.name}
                       </button>

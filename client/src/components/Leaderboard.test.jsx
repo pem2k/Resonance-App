@@ -68,8 +68,13 @@ function renderLeaderboard(standings = [team()]) {
   return { view, focusByLabel, inertStateWhenFocused, rerender }
 }
 
+function teamRow(view, name = 'Team Alpha') {
+  return view.root.findAllByType('tr')
+    .find(row => row.findAllByType('button').some(button => button.children.join('') === name))
+}
+
 function teamButton(view, name = 'Team Alpha') {
-  return view.root.findAllByType('button').find(button => button.children.join('') === name)
+  return teamRow(view, name).findByType('button')
 }
 
 function dialog(view) {
@@ -94,18 +99,24 @@ describe('team roster card', () => {
     delete globalThis.document
   })
 
-  it('opens from a semantic team button and lists the complete roster', () => {
+  it('opens from the whole team row and lists the complete roster', () => {
     const { view } = renderLeaderboard()
+    const row = teamRow(view)
     const button = teamButton(view)
 
-    expect(button).toBeDefined()
+    expect(row).toBeDefined()
+    expect(row.props.role).toBeUndefined()
+    expect(row.props.tabIndex).toBeUndefined()
+    expect(button.props.type).toBe('button')
     expect(button.props['aria-haspopup']).toBe('dialog')
     expect(button.props['aria-expanded']).toBe(false)
+    expect(button.props['aria-controls']).toBeUndefined()
 
-    act(() => button.props.onClick())
+    act(() => row.props.onClick())
 
     const card = dialog(view)
     expect(teamButton(view).props['aria-expanded']).toBe(true)
+    expect(teamButton(view).props['aria-controls']).toBe('team-roster-dialog')
     expect(card.props['aria-modal']).toBe('true')
     expect(textContent(card)).toContain('Team Alpha')
     expect(textContent(card)).toContain('17 points')
@@ -126,7 +137,7 @@ describe('team roster card', () => {
       }),
     ])
 
-    act(() => teamButton(view).props.onClick())
+    act(() => teamRow(view).props.onClick())
 
     const card = dialog(view)
     expect(textContent(card)).toContain('One')
@@ -136,7 +147,7 @@ describe('team roster card', () => {
 
   it('isolates the background and preserves list semantics while open', () => {
     const { view } = renderLeaderboard()
-    act(() => teamButton(view).props.onClick())
+    act(() => teamRow(view).props.onClick())
 
     const background = view.root.findByProps({ 'data-testid': 'leaderboard-content' })
     expect(background.props.inert).toBe('')
@@ -147,7 +158,7 @@ describe('team roster card', () => {
   it('shows a clear empty state for a team with no members', () => {
     const { view } = renderLeaderboard([team({ roster: [], captain: null })])
 
-    act(() => teamButton(view).props.onClick())
+    act(() => teamRow(view).props.onClick())
 
     expect(textContent(dialog(view))).toContain('No members are assigned to this team yet.')
   })
@@ -155,7 +166,7 @@ describe('team roster card', () => {
   it('treats a missing roster as an empty team instead of crashing', () => {
     const { view } = renderLeaderboard([team({ roster: undefined, captain: null })])
 
-    act(() => teamButton(view).props.onClick())
+    act(() => teamRow(view).props.onClick())
 
     expect(textContent(dialog(view))).toContain('No members are assigned to this team yet.')
   })
@@ -170,7 +181,7 @@ describe('team roster card', () => {
     })
     const { view } = renderLeaderboard([team(), beta])
 
-    act(() => teamButton(view, 'Team Beta').props.onClick())
+    act(() => teamRow(view, 'Team Beta').props.onClick())
 
     expect(textContent(dialog(view))).toContain('Team Beta')
     expect(textContent(dialog(view))).toContain('Beta Member')
@@ -179,7 +190,7 @@ describe('team roster card', () => {
 
   it('closes an open roster when the selected season changes', () => {
     const { view, rerender } = renderLeaderboard()
-    act(() => teamButton(view).props.onClick())
+    act(() => teamRow(view).props.onClick())
 
     rerender(
       [team({ id: 20, name: 'New Season Team' })],
@@ -190,11 +201,20 @@ describe('team roster card', () => {
     expect(document.body.style.overflow).toBe('')
   })
 
-  it('closes on Escape, restores page scrolling, and returns focus to the team button', () => {
-    const { view, focusByLabel, inertStateWhenFocused } = renderLeaderboard()
-    const button = teamButton(view)
+  it('keeps a native button as the keyboard trigger without double-opening from bubbling', () => {
+    const { view } = renderLeaderboard()
+    const clickEvent = { stopPropagation: vi.fn() }
 
-    act(() => button.props.onClick())
+    act(() => teamButton(view).props.onClick(clickEvent))
+    expect(clickEvent.stopPropagation).toHaveBeenCalled()
+    expect(view.root.findAllByProps({ role: 'dialog' })).toHaveLength(1)
+  })
+
+  it('closes on Escape, restores page scrolling, and returns focus to the team trigger', () => {
+    const { view, focusByLabel, inertStateWhenFocused } = renderLeaderboard()
+    const row = teamRow(view)
+
+    act(() => row.props.onClick())
     const teamButtonNode = focusByLabel.get('Team Alpha')
     const card = dialog(view)
     const escapeEvent = { key: 'Escape', preventDefault: vi.fn(), stopPropagation: vi.fn() }
@@ -210,8 +230,9 @@ describe('team roster card', () => {
 
   it('traps Tab on the labeled close button', () => {
     const { view, focusByLabel } = renderLeaderboard()
-    act(() => teamButton(view).props.onClick())
+    act(() => teamRow(view).props.onClick())
     const closeButtonNode = focusByLabel.get('Close Team Alpha roster')
+    expect(closeButtonNode.focus).toHaveBeenCalled()
     closeButtonNode.focus.mockClear()
     const tabEvent = { key: 'Tab', preventDefault: vi.fn() }
 
@@ -225,7 +246,7 @@ describe('team roster card', () => {
   it('closes from its labeled button and restores the prior body overflow', () => {
     document.body.style.overflow = 'clip'
     const { view, focusByLabel } = renderLeaderboard()
-    act(() => teamButton(view).props.onClick())
+    act(() => teamRow(view).props.onClick())
     const teamButtonNode = focusByLabel.get('Team Alpha')
     const closeButton = view.root.findByProps({ 'aria-label': 'Close Team Alpha roster' })
 
@@ -238,7 +259,7 @@ describe('team roster card', () => {
 
   it('closes only when the backdrop itself is clicked', () => {
     const { view, focusByLabel } = renderLeaderboard()
-    act(() => teamButton(view).props.onClick())
+    act(() => teamRow(view).props.onClick())
     const teamButtonNode = focusByLabel.get('Team Alpha')
     const backdrop = view.root.findByProps({ 'data-testid': 'team-roster-backdrop' })
 
