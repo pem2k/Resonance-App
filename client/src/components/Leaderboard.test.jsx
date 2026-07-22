@@ -20,22 +20,28 @@ function team(overrides = {}) {
   }
 }
 
+function leaderboardElement(standings, selectedSeason = season) {
+  return (
+    <Leaderboard
+      season={selectedSeason}
+      seasons={[selectedSeason]}
+      onSeasonChange={() => {}}
+      standings={standings}
+      players={[]}
+      tournaments={[]}
+      loading={false}
+      error={null}
+    />
+  )
+}
+
 function renderLeaderboard(standings = [team()]) {
   const focusByLabel = new Map()
   let view
 
   act(() => {
     view = create(
-      <Leaderboard
-        season={season}
-        seasons={[season]}
-        onSeasonChange={() => {}}
-        standings={standings}
-        players={[]}
-        tournaments={[]}
-        loading={false}
-        error={null}
-      />,
+      leaderboardElement(standings),
       {
         createNodeMock: element => {
           if (element.type !== 'button') return null
@@ -48,7 +54,11 @@ function renderLeaderboard(standings = [team()]) {
     )
   })
 
-  return { view, focusByLabel }
+  function rerender(nextStandings, nextSeason) {
+    act(() => view.update(leaderboardElement(nextStandings, nextSeason)))
+  }
+
+  return { view, focusByLabel, rerender }
 }
 
 function teamButton(view, name = 'Team Alpha') {
@@ -117,12 +127,60 @@ describe('team roster card', () => {
     expect(card.findAllByProps({ children: 'Captain' })).toHaveLength(0)
   })
 
+  it('isolates the background and preserves list semantics while open', () => {
+    const { view } = renderLeaderboard()
+    act(() => teamButton(view).props.onClick())
+
+    const background = view.root.findByProps({ 'data-testid': 'leaderboard-content' })
+    expect(background.props.inert).toBe('')
+    expect(background.props['aria-hidden']).toBe('true')
+    expect(dialog(view).findByType('ul').props.role).toBe('list')
+  })
+
   it('shows a clear empty state for a team with no members', () => {
     const { view } = renderLeaderboard([team({ roster: [], captain: null })])
 
     act(() => teamButton(view).props.onClick())
 
     expect(textContent(dialog(view))).toContain('No members are assigned to this team yet.')
+  })
+
+  it('treats a missing roster as an empty team instead of crashing', () => {
+    const { view } = renderLeaderboard([team({ roster: undefined, captain: null })])
+
+    act(() => teamButton(view).props.onClick())
+
+    expect(textContent(dialog(view))).toContain('No members are assigned to this team yet.')
+  })
+
+  it('opens the roster belonging to the selected team', () => {
+    const beta = team({
+      id: 11,
+      name: 'Team Beta',
+      captain: null,
+      roster: [{ id: 9, display_name: 'Beta Member' }],
+      total_points: 1,
+    })
+    const { view } = renderLeaderboard([team(), beta])
+
+    act(() => teamButton(view, 'Team Beta').props.onClick())
+
+    expect(textContent(dialog(view))).toContain('Team Beta')
+    expect(textContent(dialog(view))).toContain('Beta Member')
+    expect(textContent(dialog(view))).not.toContain('Team Alpha')
+  })
+
+  it('closes an open roster when the selected season changes', () => {
+    const { view, rerender } = renderLeaderboard()
+    act(() => teamButton(view).props.onClick())
+
+    rerender(
+      [team({ id: 20, name: 'New Season Team' })],
+      { id: 3, name: 'Season 3', status: 'active' },
+    )
+
+    expect(view.root.findAllByProps({ role: 'dialog' })).toHaveLength(0)
+    expect(document.body.style.overflow).toBe('')
   })
 
   it('closes on Escape, restores page scrolling, and returns focus to the team button', () => {

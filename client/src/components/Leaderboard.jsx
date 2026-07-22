@@ -91,7 +91,7 @@ function TeamRosterDialog({ team, onClose }) {
         </div>
 
         {roster.length > 0 ? (
-          <ul className={styles.rosterList}>
+          <ul className={styles.rosterList} role="list">
             {roster.map(member => {
               const isCaptain = team.captain?.id === member.id
               return (
@@ -131,6 +131,12 @@ export default function Leaderboard({ season, seasons, onSeasonChange, standings
 
   return (
     <div className={styles.root}>
+      <div
+        className={styles.leaderboardContent}
+        data-testid="leaderboard-content"
+        inert={selectedTeam ? '' : undefined}
+        aria-hidden={selectedTeam ? 'true' : undefined}
+      >
       <div className={styles.seasonBadge}>
         {seasons?.length > 1 ? (
           <select
@@ -279,6 +285,7 @@ export default function Leaderboard({ season, seasons, onSeasonChange, standings
           </div>
         </section>
       )}
+      </div>
 
       {selectedTeam && <TeamRosterDialog team={selectedTeam} onClose={closeTeamCard} />}
     </div>
