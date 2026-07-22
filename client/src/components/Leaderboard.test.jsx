@@ -10,9 +10,9 @@ function team(overrides = {}) {
   return {
     id: 10,
     name: 'Team Alpha',
-    captain: { id: 1, display_name: 'Captain' },
+    captain: { id: 1, display_name: 'Team Lead' },
     roster: [
-      { id: 1, display_name: 'Captain' },
+      { id: 1, display_name: 'Team Lead' },
       { id: 2, display_name: 'Member' },
     ],
     total_points: 17,
@@ -99,6 +99,15 @@ describe('team roster card', () => {
     delete globalThis.document
   })
 
+  it('shows Team Standings without a Captain column', () => {
+    const { view } = renderLeaderboard()
+    const teamTable = view.root.findAllByType('table')[0]
+    const headers = teamTable.findAllByType('th').map(header => textContent(header))
+
+    expect(headers).toEqual(['#', 'Team', 'Roster', 'Points'])
+    expect(teamRow(view).findAllByType('td')).toHaveLength(4)
+  })
+
   it('opens from the whole team row and lists the complete roster', () => {
     const { view } = renderLeaderboard()
     const row = teamRow(view)
@@ -122,7 +131,7 @@ describe('team roster card', () => {
     expect(textContent(card)).toContain('17 points')
     expect(textContent(card)).toContain('Captain')
     expect(textContent(card)).toContain('Member')
-    expect(card.findAllByProps({ children: 'Captain' })).not.toHaveLength(0)
+    expect(card.findAllByProps({ children: 'Captain' })).toHaveLength(1)
     expect(document.body.style.overflow).toBe('hidden')
   })
 

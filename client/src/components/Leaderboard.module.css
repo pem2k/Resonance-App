@@ -342,10 +342,6 @@
     font-size: 13px;
   }
 
-  /* Team standings: hide Captain column (col 3) */
-  .teamTable th:nth-child(3),
-  .teamTable td:nth-child(3) { display: none; }
-
   /* Player leaderboard: hide Team and Pts/Event columns (cols 3, 5) */
   .playerTable th:nth-child(3),
   .playerTable td:nth-child(3),
