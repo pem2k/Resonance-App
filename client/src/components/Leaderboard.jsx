@@ -14,11 +14,6 @@ function RankCell({ rank }) {
   return <span className={styles.muted}>{rank}</span>
 }
 
-function captainLabel(captain) {
-  if (!captain) return '—'
-  return captain.display_name.toLowerCase() === 'no captain' ? 'n/a' : captain.display_name
-}
-
 function TeamRosterDialog({ team, onClose }) {
   const closeButtonRef = useRef(null)
   const roster = team.roster ?? []
@@ -174,7 +169,6 @@ export default function Leaderboard({ season, seasons, onSeasonChange, standings
                 <tr>
                   <th>#</th>
                   <th className={styles.center}>Team</th>
-                  <th className={styles.center}>Captain</th>
                   <th className={styles.center}>Roster</th>
                   <th className={styles.center}>Points</th>
                 </tr>
@@ -205,9 +199,6 @@ export default function Leaderboard({ season, seasons, onSeasonChange, standings
                       >
                         {team.name}
                       </button>
-                    </td>
-                    <td className={`${styles.secondary} ${styles.center}`}>
-                      {captainLabel(team.captain)}
                     </td>
                     <td className={`${styles.secondary} ${styles.center}`}>
                       {team.roster?.length ?? 0}
