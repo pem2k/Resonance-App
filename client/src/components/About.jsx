@@ -90,6 +90,19 @@ export default function About() {
         </ul>
       </Section>
 
+      <Section title="Season 2 Updates">
+        <p>
+          While the point scoring system remains identical to Season 1, Season 2 introduces 
+          a new structure with <strong>no designated captains</strong>. Instead, teams are built 
+          around randomly designated members.
+        </p>
+        <p>
+          For the Season 2 draft, random players were chosen to serve as drafters and were then 
+          seeded. The draft proceeded sequentially down the line, with the lowest-seeded 
+          drafter making the first pick.
+        </p>
+      </Section>
+
       <Section title="Questions?">
         <p>
           Reach out to head TO <strong>Rome0</strong> on Discord (<code>rome0.</code>) for
