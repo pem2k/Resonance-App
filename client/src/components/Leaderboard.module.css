@@ -342,11 +342,9 @@
     font-size: 13px;
   }
 
-  /* Player leaderboard: hide Team and Pts/Event columns (cols 3, 5) */
+  /* Player leaderboard: hide Team column (col 3) */
   .playerTable th:nth-child(3),
-  .playerTable td:nth-child(3),
-  .playerTable th:nth-child(5),
-  .playerTable td:nth-child(5) { display: none; }
+  .playerTable td:nth-child(3) { display: none; }
 
   .rosterBackdrop { padding: 12px; }
 
